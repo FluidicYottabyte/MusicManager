@@ -1,0 +1,65 @@
+QWidget{
+            background: #B3D5F5;
+
+        }
+        QPushButton{
+            padding: 5px;
+            border: 1px solid;
+            background: #D59EF5;
+            border-radius: 3px;
+            font-size: 15px
+        }
+        QPushButton#smaller{
+            
+            padding: 10px;
+            border: 1px solid;
+            background: #D59EF5;
+            border-radius: 3px;
+            font-size: 15px 
+        }
+        QPushButton:hover{
+            background: #E1B7F5;
+        }
+        QPushButton:hover#smaller{
+            background: #E1B7F5;
+        }
+        QSlider::groove:horizontal {
+            border: 1px solid;
+            height: 5px;
+            margin: 0px;
+            border-radius: 2px;
+            }
+        QSlider::handle:horizontal {
+            background-color: black;
+            border: 1px solid;
+            height: 7px;
+            width: 7px;
+            margin: -2px 0px;
+            border-radius: 3px
+            }
+        QSlider::add-page:horizontal{
+            background: grey;
+        }
+        QSlider::sub-page:horizontal{
+            background: #B88AF5;
+        }
+        QListWidget{
+            background: #ADCBFB;
+            border: 1px solid black;
+            border-radius: 10px;
+        }
+        QLabel{
+            font-family: Georgia, serif;
+            font-size: 20px;
+            vertical-align: top;
+            font-style: italic;
+        }
+        QLabel#numbers{
+            font-family: Verdana, sans-serif;
+            font-size: 15px;
+        }
+        QLabel#artistTitle{
+            font-family: Verdana, sans-serif;
+            font-style: italic;
+            font-size: 15px;
+        }
