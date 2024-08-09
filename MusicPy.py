@@ -275,6 +275,7 @@ class MusicPlayer(QMainWindow):
 
     def skip_forward(self):
         if self.current_playlist:
+            self.saved_position = 0
             self.current_index = (self.current_index + 1) % len(self.current_playlist)
             self.play_song()
 
