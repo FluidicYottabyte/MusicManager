@@ -12,6 +12,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QPixmap, QFont, QPainter, QColor
 from PyQt6.QtCore import Qt, QTimer, QSize, pyqtSignal
 from mutagen import File
+from mutagen.flac import FLAC, Picture
 from PIL import Image
 from io import BytesIO
 from mutagen.id3 import ID3
@@ -308,11 +309,36 @@ class MusicPlayer(QMainWindow):
                 artist = audio.tags.get('TPE1', ['Unknown Artist'])[0]
                 album = audio.tags.get('TALB', ['Unknown Album'])[0]
                 self.song_details.setText(f"{title} - {artist}")
-                tags = ID3(song_path)
                 
-                print(tags.pprint())
-                pict = tags.getall("APIC")[0].data
-                print(pict)
+                pict= None
+                
+                if os.path.splitext(song_path)[1] == ".flac":
+                    
+                    
+                    var = FLAC(song_path)
+                    artist = var['artist'][0]
+                    title = var['title'][0]
+                    self.song_details.setText(f"{title} - {artist}")
+                    pics = var.pictures
+                    for p in pics:
+                        if p.type == 3: #front cover
+                            print("\nfound front cover") 
+                            with open("cover.jpg", "wb") as f:
+                                pict = (p.data)
+                    
+                    print(var)
+                    
+                    try:
+                        album = var["ALBUM"]
+                    except KeyError:
+                        album = ["Unknown Album"]
+                
+                else:    
+                    tags = ID3(song_path)
+                    
+                    print(tags.pprint())
+                    pict = tags.getall("APIC")[0].data
+                    print(pict)
                 # Load album art if available
                 if pict != None:
                     print("Picture is available")
