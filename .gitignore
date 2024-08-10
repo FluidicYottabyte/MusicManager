@@ -6,3 +6,6 @@ dist/
 build
 build/
 MusicManager.spec
+
+!.gitkeep
+!*/
