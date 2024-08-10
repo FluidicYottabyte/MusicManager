@@ -192,6 +192,8 @@ class MusicPlayer(QMainWindow):
         self.current_playlist = []
         self.current_index = -1
         
+        self.change_volume(system_volume)
+        
         
     
         
@@ -227,6 +229,7 @@ class MusicPlayer(QMainWindow):
                 item = QListWidgetItem(os.path.splitext(playlist_file)[0])
                 self.playlist_widget.addItem(item)
                 item.setData(Qt.ItemDataRole.UserRole, playlist_file)
+        
 
 
     def play_playlist(self, item):
