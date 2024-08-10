@@ -1,6 +1,6 @@
-Songs/
+Songs/*
 Utility/Settings.json
-Playlists/
+Playlists/*
 dist
 dist/
 build

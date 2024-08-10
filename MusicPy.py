@@ -10,13 +10,14 @@ from PyQt6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QMessageBox, QFileDialog, QLineEdit, QAbstractItemView
 )
 from PyQt6.QtGui import QPixmap, QFont, QPainter, QColor
-from PyQt6.QtCore import Qt, QTimer, QSize
+from PyQt6.QtCore import Qt, QTimer, QSize, pyqtSignal
 from mutagen import File
 from PIL import Image
 from io import BytesIO
 from mutagen.id3 import ID3
 import json
 import atexit
+import shutil 
 
 try:
     import vlc
@@ -45,6 +46,7 @@ system_volume = 50
 
 
 class MusicPlayer(QMainWindow):
+    
     
     
     def __init__(self, settings):
@@ -166,11 +168,19 @@ class MusicPlayer(QMainWindow):
         self.playlist_widget.itemDoubleClicked.connect(self.show_playlist_popup)
         self.PLaylistLayout.addWidget(self.playlist_widget)
 
+        #new layout for playlist and add song buttons
+        self.lotta_buttons_layout = QHBoxLayout()
+
         # Button to create a new playlist
         self.create_playlist_button = QPushButton('Create Playlist')
         self.create_playlist_button.clicked.connect(self.create_playlist)
-        self.PLaylistLayout.addWidget(self.create_playlist_button)
+        self.lotta_buttons_layout.addWidget(self.create_playlist_button)
         
+        self.create_playlist_button = QPushButton('Add Songs')
+        self.create_playlist_button.clicked.connect(self.open_drag_drop_window)
+        self.lotta_buttons_layout.addWidget(self.create_playlist_button)
+        
+        self.PLaylistLayout.addLayout(self.lotta_buttons_layout)
         self.otherLayout.addLayout(self.PLaylistLayout)
         
         self.main_layout.addLayout(self.otherLayout)
@@ -194,8 +204,23 @@ class MusicPlayer(QMainWindow):
         
         self.change_volume(system_volume)
         
-        
     
+    
+    def open_drag_drop_window(self):
+        # Create the drag-and-drop window
+        self.drag_drop_window = DragDropWidget()
+        self.drag_drop_window.setWindowTitle('Drag and Drop Files/Folders')
+        self.drag_drop_window.resize(400, 300)
+        self.drag_drop_window.show()
+        
+        self.drag_drop_window.filesDropped.connect(self.handle_files_dropped)
+        
+    def handle_files_dropped(self, file_paths):
+        # Handle the list of dropped files (received from the dialog)
+        print("Received files from dialog:")
+        for path1 in file_paths:
+            if not os.path.isfile(os.path.join(resource_path("Songs"),os.path.basename(path1))): #Checks if file already exists, or not
+                shutil.copy(path1,os.path.join(resource_path("Songs"),os.path.basename(path1)))
         
     def extract_pitch_range(self, media_player):
         # Get the audio samples from the media player
@@ -586,6 +611,61 @@ class CreatePlaylistDialog(QDialog):
                         
         self.accept()
 
+
+class DragDropWidget(QWidget):
+    
+    
+    filesDropped = pyqtSignal(list)
+    
+    def __init__(self):
+        super().__init__()
+        
+        # Set up the label to display the drop target
+        self.label = QLabel("Drag files or folders here", self)
+        self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.label.setStyleSheet("border: 2px dashed #aaa; padding: 50px;")
+        self.dropped_files = []
+        
+        # Set up the close button
+        self.close_button = QPushButton("Finish", self)
+        self.close_button.clicked.connect(self.close)
+        
+        # Set up the layout
+        layout = QVBoxLayout()
+        layout.addWidget(self.label)
+        self.setLayout(layout)
+        
+        # Enable drag and drop
+        self.setAcceptDrops(True)
+
+    def dragEnterEvent(self, event):
+        # Accept the event if it contains URLs (files or folders)
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event):
+        # Get the list of dropped URLs
+        urls = event.mimeData().urls()
+        
+        # Extract the file paths and display them
+        if urls:
+            file_paths = [url.toLocalFile() for url in urls]
+            self.label.setText("\n".join(file_paths))
+            print("Dropped files/folders:")
+            for path in file_paths:
+                self.dropped_files.append(path)
+        event.acceptProposedAction()
+        
+    def closeEvent(self, event):
+        # Emit the signal with the list of file paths when the dialog is closed
+        self.filesDropped.emit(self.dropped_files)
+        event.accept()
+        
+        
+        
+        
 
 def exit_handler():
     print("closing musicmanager")
