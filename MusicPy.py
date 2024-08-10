@@ -15,18 +15,43 @@ from mutagen import File
 from PIL import Image
 from io import BytesIO
 from mutagen.id3 import ID3
+import json
+import atexit
 
 try:
     import vlc
 except ImportError:
     raise ImportError("The 'python-vlc' library is required. Install it using 'pip install python-vlc'.")
 
+
+def resource_path(relative_path):
+        """ Get absolute path to resource, works for dev and for PyInstaller """
+        try:
+            # PyInstaller creates a temp folder and stores path in _MEIPASS
+            base_path = sys._MEIPASS
+        except Exception:
+            base_path = os.path.abspath(".")
+        
+        return os.path.join(base_path, relative_path)
+    
+    
+    
+settings_template = {}
+
+settings_template["settings"] = {}
+settings_template["settings"]["volume"] = 50
+
+system_volume = 50
+
+
 class MusicPlayer(QMainWindow):
-    def __init__(self):
+    
+    
+    def __init__(self, settings):
         
         super().__init__()
         
-        self.utilities = os.path.join(os.getcwd(), 'Utility')
+        self.utilities = resource_path('Utility')
         
         self.setWindowTitle('Music Manager')
         self.setGeometry(100, 100, 800, 600)
@@ -91,7 +116,10 @@ class MusicPlayer(QMainWindow):
         self.volume_slider = QSlider(Qt.Orientation.Horizontal)
         self.volume_slider.setRange(0, 100)
         self.volume_slider.setFixedWidth(200)
-        self.volume_slider.setValue(50)  # Default volume level
+        self.volume_slider.setValue(settings["volume"])  # Default volume level
+        
+        system_volume = settings["volume"]
+        
         self.volume_slider.valueChanged.connect(self.change_volume)
         self.song_info_layout.addWidget(self.volume_slider)
         
@@ -164,6 +192,9 @@ class MusicPlayer(QMainWindow):
         self.current_playlist = []
         self.current_index = -1
         
+        
+    
+        
     def extract_pitch_range(self, media_player):
         # Get the audio samples from the media player
         return 0, media_player.audio_get_volume()
@@ -183,11 +214,14 @@ class MusicPlayer(QMainWindow):
 
     def change_volume(self, value):
         self.player.audio_set_volume(value)
+        global system_volume
+        system_volume = value
         print(f"Volume set to: {value}")
+        
 
     def load_playlists(self):
         self.playlist_widget.clear()  # Clear existing items before loading
-        playlists_path = os.path.join(os.getcwd(), 'Playlists')
+        playlists_path = resource_path('Playlists')
         for playlist_file in os.listdir(playlists_path):
             if playlist_file.endswith('.txt'):
                 item = QListWidgetItem(os.path.splitext(playlist_file)[0])
@@ -203,11 +237,11 @@ class MusicPlayer(QMainWindow):
     def load_songs_from_playlist(self, playlist_file):
         self.current_playlist.clear()
         self.current_index = -1
-        playlist_path = os.path.join(os.getcwd(), 'Playlists', playlist_file)
+        playlist_path = os.path.join(resource_path('Playlists'), playlist_file)
         with open(playlist_path, 'r') as file:
             for line in file:
                 song_path = line.strip()
-                if os.path.isfile(os.path.join(os.getcwd(), 'Songs', song_path)):
+                if os.path.isfile(os.path.join(resource_path('Songs'), song_path)):
                     self.current_playlist.append(song_path)
 
     
@@ -219,7 +253,7 @@ class MusicPlayer(QMainWindow):
             self.current_index = 0
 
         song_path = self.current_playlist[self.current_index]
-        song_full_path = os.path.join(os.getcwd(), 'Songs', song_path)
+        song_full_path = os.path.join(resource_path('Songs'), song_path)
         print(song_full_path)
         media = self.instance.media_new(song_full_path)
         
@@ -433,17 +467,17 @@ class CreatePlaylistDialog(QDialog):
         
 
     def load_available_songs(self):
-        songs_path = os.path.join(os.getcwd(), 'Songs')
+        songs_path = resource_path('Songs')
         for song_file in os.listdir(songs_path):
             if song_file.endswith(('.mp3', '.flac', '.wav')):
                 self.available_song_list_widget.addItem(song_file)
                 
     def load_added_songs(self):
-        playlist_path = os.path.join(os.getcwd(), 'Playlists', self.view)
+        playlist_path = os.path.join(resource_path('Playlists'), self.view)
         with open(playlist_path, 'r') as file:
             for line in file:
                 song_path = line.strip()
-                if os.path.isfile(os.path.join(os.getcwd(), 'Songs', song_path)):
+                if os.path.isfile(os.path.join(resource_path('Songs'), song_path)):
                     self.selected_songs.append(song_path)
                     self.added_song_list_widget.addItem(song_path)
 
@@ -453,7 +487,7 @@ class CreatePlaylistDialog(QDialog):
         if selected_item:
             print("We are selected")
             selected_song = selected_item.text()
-            song_path = os.path.join(os.getcwd(), 'Songs', selected_song)
+            song_path = os.path.join(resource_path('Songs'), selected_song)
             song_name = os.path.basename(song_path)
             print(song_name)
             self.selected_songs.append(song_name)
@@ -473,7 +507,7 @@ class CreatePlaylistDialog(QDialog):
         return playlist_name, selected_songs
     
     def delete_playlist(self):
-        playlist_path2 = os.path.join(os.getcwd(), 'Playlists', f"{self.view}")
+        playlist_path2 = os.path.join(resource_path('Playlists'), f"{self.view}")
         os.remove(playlist_path2)
         self.accept()
     
@@ -488,13 +522,13 @@ class CreatePlaylistDialog(QDialog):
         playlist_path = os.path.join(os.getcwd(), 'Playlists')
         print(self.playlist_name_edit.text())
         if self.playlist_name_edit.text() == "" and self.isEditing:
-            playlist_path = os.path.join(os.getcwd(), 'Playlists', f"{self.view}")
+            playlist_path = os.path.join(resource_path('Playlists'), f"{self.view}")
             with open(playlist_path, "w") as f:
                 for song in self.selected_songs:
                     print(song)
                     f.write(song + "\n")
         elif self.isEditing:
-            playlist_path2 = os.path.join(os.getcwd(), 'Playlists', f"{self.view}")
+            playlist_path2 = os.path.join(resource_path('Playlists'), f"{self.view}")
             os.remove(playlist_path2)
             
             for playlist_path in os.listdir(playlist_path):
@@ -515,7 +549,7 @@ class CreatePlaylistDialog(QDialog):
                 error_popup.exec()
                 return
                 
-            playlist_path = os.path.join(os.getcwd(), 'Playlists', f"{self.playlist_name_edit.text()}.txt")
+            playlist_path = os.path.join(resource_path('Playlists'), f"{self.playlist_name_edit.text()}.txt")
             with open(playlist_path, "w") as f:
                 for song in self.selected_songs:
                     print(song)
@@ -539,7 +573,7 @@ class CreatePlaylistDialog(QDialog):
                 error_popup.exec()
                 return
                 
-            playlist_path = os.path.join(os.getcwd(), 'Playlists', f"{self.playlist_name_edit.text()}.txt")
+            playlist_path = os.path.join(resource_path('Playlists'), f"{self.playlist_name_edit.text()}.txt")
             with open(playlist_path, "w") as f:
                 for song in self.selected_songs:
                     print(song)
@@ -549,13 +583,52 @@ class CreatePlaylistDialog(QDialog):
                         
         self.accept()
 
+
+def exit_handler():
+    print("closing musicmanager")
+        
+    with open(os.path.join(utility_path,'Settings.json')) as f:
+        data = json.load(f)
+
+
+    data["settings"]['volume'] = system_volume
+
+    with open(os.path.join(utility_path,'Settings.json'),"w") as f:
+        json.dump(data, f)
+        
+    print("Settings saved.")
+            
+            
+            
 if __name__ == '__main__':
-    utility_path = os.path.join(os.getcwd(), 'Utility', f"Style.txt")
+    utility_path = resource_path('Utility')
+    style_path = os.path.join(utility_path, f"Style.txt")
+    settings = None
+    
+    
+    #See if settings already exists; if not, create from template.
+    try:
+        with open(os.path.join(utility_path,'Settings.json'), 'r') as f:
+            settings = json.load(f)
+            
+    except FileNotFoundError or FileExistsError:
+        with open(os.path.join(utility_path,'Settings.json'), 'w') as f:
+            json.dump(settings_template, f)
+            
+
     app = QApplication(sys.argv)
-    with open(utility_path, "r") as f:
+    with open(style_path, "r") as f:
         style = f.read().replace('\n', '')
         print(style)
         app.setStyleSheet(style)
-    player = MusicPlayer()
+    player = MusicPlayer(settings["settings"])
     player.show()
+    atexit.register(exit_handler)
     sys.exit(app.exec())
+    
+
+        
+
+
+        
+        
