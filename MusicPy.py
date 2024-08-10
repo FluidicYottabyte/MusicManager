@@ -19,6 +19,7 @@ from mutagen.id3 import ID3
 import json
 import atexit
 import shutil 
+import codecs
 
 try:
     import vlc
@@ -36,7 +37,36 @@ def resource_path(relative_path):
         
         return os.path.join(base_path, relative_path)
     
-    
+
+def replace_unicode_errors(text, replacement='�'):
+    result = []
+    for char in text:
+        try:
+            # Check if the character can be encoded in UTF-8 without errors
+            with open("bastard.txt", "w", encoding = "utf-8") as f:
+                f.write(char)
+            
+            os.remove("bastard.txt")
+            result.append(char)
+        except UnicodeEncodeError:
+            # If encoding fails, append the replacement character
+            result.append(replacement)
+    return ''.join(result)
+
+
+def fix_unicode(s):
+    try:
+        with open("bastard.txt", "w", encoding = "utf-8") as f:
+            f.write(s)
+            
+        os.remove("bastard.txt")
+        return (s)
+    except Exception as e:
+        ret = replace_unicode_errors(s)
+        print("Fixed unicode: "+ret)
+        resource_path("Songs")
+        return (ret)
+
     
 settings_template = {}
 
@@ -267,7 +297,7 @@ class MusicPlayer(QMainWindow):
         self.current_playlist.clear()
         self.current_index = -1
         playlist_path = os.path.join(resource_path('Playlists'), playlist_file)
-        with open(playlist_path, 'r') as file:
+        with open(playlist_path, 'r', encoding = "utf-8") as file:
             for line in file:
                 song_path = line.strip()
                 if os.path.isfile(os.path.join(resource_path('Songs'), song_path)):
@@ -319,6 +349,7 @@ class MusicPlayer(QMainWindow):
                     artist = var['artist'][0]
                     title = var['title'][0]
                     self.song_details.setText(f"{title} - {artist}")
+                    
                     pics = var.pictures
                     for p in pics:
                         if p.type == 3: #front cover
@@ -352,7 +383,7 @@ class MusicPlayer(QMainWindow):
         else:
             self.song_details.setText(os.path.splitext(os.path.basename(song_path))[0]) 
             pixmap = QPixmap(os.path.join(self.utilities, "default.png"))
-            self.album_art.setPixmap(pixmap)           
+            self.album_art.setPixmap(pixmap)
 
     def stop_song(self):
         # Save the current position before stopping
@@ -528,7 +559,7 @@ class CreatePlaylistDialog(QDialog):
                 
     def load_added_songs(self):
         playlist_path = os.path.join(resource_path('Playlists'), self.view)
-        with open(playlist_path, 'r') as file:
+        with open(playlist_path, "r", encoding = "utf-8") as file:
             for line in file:
                 song_path = line.strip()
                 if os.path.isfile(os.path.join(resource_path('Songs'), song_path)):
@@ -577,10 +608,10 @@ class CreatePlaylistDialog(QDialog):
         print(self.playlist_name_edit.text())
         if self.playlist_name_edit.text() == "" and self.isEditing:
             playlist_path = os.path.join(resource_path('Playlists'), f"{self.view}")
-            with open(playlist_path, "w") as f:
+            with open(playlist_path, "w", encoding="utf-8") as f:
                 for song in self.selected_songs:
                     print(song)
-                    f.write(song + "\n")
+                    f.write(fix_unicode(song) + "\n")
         elif self.isEditing:
             playlist_path2 = os.path.join(resource_path('Playlists'), f"{self.view}")
             os.remove(playlist_path2)
@@ -604,10 +635,10 @@ class CreatePlaylistDialog(QDialog):
                 return
                 
             playlist_path = os.path.join(resource_path('Playlists'), f"{self.playlist_name_edit.text()}.txt")
-            with open(playlist_path, "w") as f:
+            with open(playlist_path, "w", encoding = "utf-8") as f:
                 for song in self.selected_songs:
                     print(song)
-                    f.write(song + "\n")
+                    f.write(fix_unicode(song) + "\n")
         else:
             for playlist_path in os.listdir(playlist_path):
                 print(os.path.splitext(playlist_path)[0])
@@ -628,10 +659,10 @@ class CreatePlaylistDialog(QDialog):
                 return
                 
             playlist_path = os.path.join(resource_path('Playlists'), f"{self.playlist_name_edit.text()}.txt")
-            with open(playlist_path, "w") as f:
+            with open(playlist_path, "w", encoding = "utf-8") as f:
                 for song in self.selected_songs:
                     print(song)
-                    f.write(song + "\n")
+                    f.write(fix_unicode(song) + "\n")
                 
                 
                         
