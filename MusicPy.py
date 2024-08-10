@@ -610,6 +610,7 @@ if __name__ == '__main__':
     
     
     #See if settings already exists; if not, create from template.
+    
     try:
         with open(os.path.join(utility_path,'Settings.json'), 'r') as f:
             settings = json.load(f)
@@ -618,6 +619,8 @@ if __name__ == '__main__':
         with open(os.path.join(utility_path,'Settings.json'), 'w') as f:
             json.dump(settings_template, f)
             
+    with open(os.path.join(utility_path,'Settings.json'), 'r') as f:
+            settings = json.load(f)
 
     app = QApplication(sys.argv)
     with open(style_path, "r") as f:
