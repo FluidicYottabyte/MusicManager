@@ -338,7 +338,7 @@ class MusicPlayer(QMainWindow):
                 title = audio.tags.get('TIT2', ['Unknown Title'])[0]
                 artist = audio.tags.get('TPE1', ['Unknown Artist'])[0]
                 album = audio.tags.get('TALB', ['Unknown Album'])[0]
-                self.song_details.setText(f"{title} - {artist}")
+                
                 
                 pict= None
                 
@@ -346,8 +346,21 @@ class MusicPlayer(QMainWindow):
                     
                     
                     var = FLAC(song_path)
-                    artist = var['artist'][0]
-                    title = var['title'][0]
+                    print("Song metadata: "+ str(var))
+                    
+                    try:
+                        artist = var['artist'][0]
+                    except KeyError:
+                        print("There was an error fetching song artist.")
+                         
+                                    
+                    try:
+                        title = var['title'][0]
+                    except KeyError:
+                        print("There was an error fetching song title")
+                        if title != 'Unknown Artist':
+                            title = os.path.splitext(os.path.basename(song_path))[0] 
+                        
                     self.song_details.setText(f"{title} - {artist}")
                     
                     pics = var.pictures
@@ -363,6 +376,8 @@ class MusicPlayer(QMainWindow):
                         album = var["ALBUM"]
                     except KeyError:
                         album = ["Unknown Album"]
+                        
+                
                 
                 else:    
                     tags = ID3(song_path)
@@ -379,7 +394,8 @@ class MusicPlayer(QMainWindow):
                     self.album_art.setPixmap(pixmap)
                 else:
                     self.album_art.clear()
-                    
+                
+                self.song_details.setText(f"{title}\nBy {artist}")
         else:
             self.song_details.setText(os.path.splitext(os.path.basename(song_path))[0]) 
             pixmap = QPixmap(os.path.join(self.utilities, "default.png"))
