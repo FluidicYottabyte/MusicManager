@@ -7,7 +7,7 @@ import numpy as np
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QLabel, QVBoxLayout, QHBoxLayout, QWidget,
     QSlider, QListWidget, QListWidgetItem, QPushButton, QDialog, QDialogButtonBox,
-    QVBoxLayout, QHBoxLayout, QMessageBox, QFileDialog, QLineEdit, QAbstractItemView
+    QVBoxLayout, QHBoxLayout, QMessageBox, QFileDialog, QLineEdit, QAbstractItemView, QSizePolicy,QFrame
 )
 from PyQt6.QtGui import QPixmap, QFont, QPainter, QColor
 from PyQt6.QtCore import Qt, QTimer, QSize, pyqtSignal
@@ -72,6 +72,7 @@ settings_template = {}
 
 settings_template["settings"] = {}
 settings_template["settings"]["volume"] = 50
+settings_template["settings"]["text_color"] = '#000000'
 
 system_volume = 50
 
@@ -183,20 +184,19 @@ class MusicPlayer(QMainWindow):
         self.shuffle_button.clicked.connect(self.shuffle_songs)
         self.control_layout.addWidget(self.shuffle_button)
 
-
         # Playlists
         self.PLaylistLayout = QVBoxLayout()
         self.playlist_widget = QListWidget()
+        self.playlist_widget.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+        
         self.playlist_widget.setIconSize(QSize(self.playlist_widget.sizeHint().width(),50))
+        self.playlist_widget.setMinimumSize(500, 100)
         font = QFont()
         font.setFamily("serif")
         font.setPointSize(13)
         font.setBold(False)
         font.setItalic(False)
         self.playlist_widget.setFont(font)
-        self.playlist_widget.itemClicked.connect(self.play_playlist)
-        
-        self.playlist_widget.itemDoubleClicked.connect(self.show_playlist_popup)
         self.PLaylistLayout.addWidget(self.playlist_widget)
 
         #new layout for playlist and add song buttons
@@ -288,14 +288,64 @@ class MusicPlayer(QMainWindow):
         playlists_path = resource_path('Playlists')
         for playlist_file in os.listdir(playlists_path):
             if playlist_file.endswith('.txt'):
-                item = QListWidgetItem(os.path.splitext(playlist_file)[0])
-                self.playlist_widget.addItem(item)
+                # item = QListWidgetItem(os.path.splitext(playlist_file)[0])
+                # self.playlist_widget.addItem(item)
+                # item.setData(Qt.ItemDataRole.UserRole, playlist_file)
+                
+                item = QListWidgetItem()
                 item.setData(Qt.ItemDataRole.UserRole, playlist_file)
+                item_widget = QWidget()
+                line_text = QLabel(os.path.splitext(playlist_file)[0])
+                line_text.setSizePolicy(
+                    QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+                )
+                
+                line_push_button = QPushButton(u'\u25b6')
+                line_push_button.setObjectName("playlists")
+                line_push_button.clicked.connect(self.play_playlist)
+                line_push_button.setSizePolicy(
+                    QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed
+                )
+                line_push_button.setProperty('item_data', playlist_file)
+                
+                line_edit_button = QPushButton(u"\u26ED")
+                line_edit_button.setObjectName("playlists")
+                line_edit_button.clicked.connect(self.show_playlist_popup)
+                line_edit_button.setSizePolicy(
+                    QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed
+                )
+                line_edit_button.setProperty('item_data', playlist_file)
+                
+                item_layout = QHBoxLayout()
+                item_layout.addWidget(line_text)
+                item_layout.addWidget(line_push_button)
+                item_layout.addWidget(line_edit_button)
+                item_widget.setLayout(item_layout)
+                
+                item.setSizeHint(item_widget.sizeHint())
+                self.playlist_widget.addItem(item)
+                self.playlist_widget.setItemWidget(item, item_widget)
+                
+                seperator = QListWidgetItem()
+                seperator.setSizeHint(QSize(0, 5))
+                seperator.setFlags(Qt.ItemFlag.NoItemFlags)
+                
+                self.playlist_widget.addItem(seperator)
+                
+                lineFrame = QFrame()
+                lineFrame.setFrameShape(QFrame.Shape.HLine)
+                lineFrame.setFrameShadow(QFrame.Shadow.Sunken)
+                
+                self.playlist_widget.setItemWidget(seperator, lineFrame)
+                
         
 
 
-    def play_playlist(self, item):
-        playlist_file = item.data(Qt.ItemDataRole.UserRole)
+    def play_playlist(self):        
+        button = self.sender()
+
+        # Retrieve the data stored in the button
+        playlist_file = button.property('item_data')
         self.load_songs_from_playlist(playlist_file)
         self.play_song()
 
@@ -445,8 +495,11 @@ class MusicPlayer(QMainWindow):
     def set_position(self, position):
         self.player.set_position(position / 1000)
 
-    def show_playlist_popup(self, item):
-        playlist_file = item.data(Qt.ItemDataRole.UserRole)
+    def show_playlist_popup(self):
+        button = self.sender()
+
+        # Retrieve the data stored in the button
+        playlist_file = button.property('item_data')
         dialog = CreatePlaylistDialog(self, playlist_file)
         dialog.exec()
         self.load_playlists()
@@ -752,11 +805,8 @@ def exit_handler():
     with open(os.path.join(utility_path,'Settings.json')) as f:
         data = json.load(f)
 
-
-    data["settings"]['volume'] = system_volume
-
     with open(os.path.join(utility_path,'Settings.json'),"w") as f:
-        json.dump(data, f)
+        json.dump(settings, f)
         
     print("Settings saved.")
             
@@ -767,6 +817,7 @@ if __name__ == '__main__':
     style_path = os.path.join(utility_path, f"Style.txt")
     settings = None
     
+    fontcolor = "#000000"
     
     #See if settings already exists; if not, create from template.
     
@@ -778,12 +829,27 @@ if __name__ == '__main__':
         with open(os.path.join(utility_path,'Settings.json'), 'w') as f:
             json.dump(settings_template, f)
             
+    #then load settings
     with open(os.path.join(utility_path,'Settings.json'), 'r') as f:
             settings = json.load(f)
+            
+    #If settings already exists, but there's a change tothe default settings, this will catch it
+    for key in settings_template["settings"]:
+        try:
+            settings["settings"][key]
+        except KeyError:
+            print("Old settings detected, adding new features")
+            settings["settings"][key] = settings_template["settings"][key]
+            print("added "+str(key))
+            
+            
 
     app = QApplication(sys.argv)
     with open(style_path, "r") as f:
         style = f.read().replace('\n', '')
+        
+        style = style.replace('(font_color)',fontcolor)
+        
         print(style)
         app.setStyleSheet(style)
     player = MusicPlayer(settings["settings"])

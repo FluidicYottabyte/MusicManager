@@ -1,13 +1,14 @@
 QWidget{
             background: #B3D5F5;
-
+            
         }
         QPushButton{
             padding: 5px;
             border: 1px solid;
             background: #D59EF5;
             border-radius: 3px;
-            font-size: 15px
+            font-size: 15px;
+            color:(font_color)
         }
         QPushButton#smaller{
             
@@ -15,12 +16,24 @@ QWidget{
             border: 1px solid;
             background: #D59EF5;
             border-radius: 3px;
-            font-size: 15px 
+            font-size: 15px
+        }
+	    QPushButton#playlists{
+
+            padding: 10px;
+            border: 1px solid;
+            background: #D59EF5;
+            border-radius: 3px;
+            font-size: 15px;
+            width: 25%;
         }
         QPushButton:hover{
             background: #E1B7F5;
         }
         QPushButton:hover#smaller{
+            background: #E1B7F5;
+        }
+        QPushButton:hover#playlists{
             background: #E1B7F5;
         }
         QSlider::groove:horizontal {
@@ -47,19 +60,23 @@ QWidget{
             background: #ADCBFB;
             border: 1px solid black;
             border-radius: 10px;
+            color:(font_color)
         }
         QLabel{
             font-family: Georgia, serif;
             font-size: 20px;
             vertical-align: top;
             font-style: italic;
+            color:(font_color)
         }
         QLabel#numbers{
             font-family: Verdana, sans-serif;
             font-size: 15px;
+            color:(font_color)
         }
         QLabel#artistTitle{
             font-family: Verdana, sans-serif;
             font-style: italic;
             font-size: 15px;
+            color:(font_color)
         }
