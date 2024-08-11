@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (
     QSlider, QListWidget, QListWidgetItem, QPushButton, QDialog, QDialogButtonBox,
     QVBoxLayout, QHBoxLayout, QMessageBox, QFileDialog, QLineEdit, QAbstractItemView, QSizePolicy,QFrame
 )
-from PyQt6.QtGui import QPixmap, QFont, QPainter, QColor
+from PyQt6.QtGui import QPixmap, QFont, QPainter, QColor,QIcon
 from PyQt6.QtCore import Qt, QTimer, QSize, pyqtSignal
 from mutagen import File
 from mutagen.flac import FLAC, Picture
@@ -77,6 +77,7 @@ settings_template["settings"]["text_color"] = '#000000'
 system_volume = 50
 
 
+
 class MusicPlayer(QMainWindow):
     
     
@@ -91,6 +92,7 @@ class MusicPlayer(QMainWindow):
         self.setGeometry(100, 100, 800, 600)
         
         self.saved_position = 0
+        self.stopped = True
         
         # VLC player instance
         self.instance = vlc.Instance()
@@ -383,6 +385,7 @@ class MusicPlayer(QMainWindow):
         self.player.play()
         self.timer.start()
         
+        self.stopped = False
         
         self.load_song_metadata(song_full_path)
         self.update_progress()
@@ -458,6 +461,10 @@ class MusicPlayer(QMainWindow):
             self.album_art.setPixmap(pixmap)
 
     def stop_song(self):
+        if self.stopped:
+            return
+        
+        self.stopped = True
         # Save the current position before stopping
         self.saved_position = self.player.get_time()
         print(self.saved_position)
@@ -852,6 +859,8 @@ if __name__ == '__main__':
         
         print(style)
         app.setStyleSheet(style)
+        
+    app.setWindowIcon(QIcon(os.path.join(utility_path,"AppIcon.png")))
     player = MusicPlayer(settings["settings"])
     player.show()
     atexit.register(exit_handler)
