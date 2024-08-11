@@ -250,8 +250,14 @@ class MusicPlayer(QMainWindow):
         # Handle the list of dropped files (received from the dialog)
         print("Received files from dialog:")
         for path1 in file_paths:
-            if not os.path.isfile(os.path.join(resource_path("Songs"),os.path.basename(path1))): #Checks if file already exists, or not
-                shutil.copy(path1,os.path.join(resource_path("Songs"),os.path.basename(path1)))
+            if not os.path.isfile(path1):
+                self.handle_files_dropped([os.path.join(path1, f) for f in os.listdir(path1)])
+            else:
+                if os.path.splitext(path1)[1].lower() in [".mp3", ".flac", ".aiff",".wav"]: 
+                    if not os.path.isfile(os.path.join(resource_path("Songs"),os.path.basename(path1))): #Checks if file already exists, or not
+                        shutil.copy(path1,os.path.join(resource_path("Songs"),os.path.basename(path1)))
+                
+        return
         
     def extract_pitch_range(self, media_player):
         # Get the audio samples from the media player
@@ -333,7 +339,7 @@ class MusicPlayer(QMainWindow):
 
     def load_song_metadata(self, song_path):
         audio = File(song_path)
-        if os.path.splitext(song_path)[1] == ".mp3" or os.path.splitext(song_path)[1] == ".flac" or os.path.splitext(song_path)[1] == ".aiff":
+        if os.path.splitext(song_path)[1].lower() in [".mp3", ".flac", ".aiff"]: 
             if audio:
                 title = audio.tags.get('TIT2', ['Unknown Title'])[0]
                 artist = audio.tags.get('TPE1', ['Unknown Artist'])[0]
