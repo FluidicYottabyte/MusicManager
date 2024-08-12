@@ -127,3 +127,6 @@ QWidget{
             font-size: 15px;
             color:(font_color)
         }
+        QLineEdit{
+            color:(font_color)
+        }
