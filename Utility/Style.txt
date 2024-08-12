@@ -27,6 +27,37 @@ QWidget{
             font-size: 15px;
             width: 25%;
         }
+        QPushButton#song{
+
+            padding: 4px;
+            border: 1px solid;
+            background: #D59EF5;
+            border-radius: 10px;
+            font-size: 10px;
+            width: 15%;
+            height: 15%
+        }
+        QPushButton#remove{
+
+            padding: 4px;
+            border: 1px solid;
+            background: #ff2d00;
+            border-radius: 10px;
+            font-size: 10px;
+            width: 15%;
+            height: 15%
+        }
+        QPushButton#add{
+
+            padding: 4px;
+            border: 1px solid;
+            background: #52ff00;
+            border-radius: 10px;
+            font-size: 10px;
+            width: 15%;
+            height: 15%
+        }
+        
         QPushButton:hover{
             background: #E1B7F5;
         }
@@ -35,6 +66,15 @@ QWidget{
         }
         QPushButton:hover#playlists{
             background: #E1B7F5;
+        }
+        QPushButton:hover#song{
+            background: #E1B7F5;
+        }
+        QPushButton:hover#remove{
+            background: #ff613f;
+        }
+        QPushButton:hover#add{
+            background: #7dff3f;
         }
         QSlider::groove:horizontal {
             border: 1px solid;
@@ -67,6 +107,13 @@ QWidget{
             font-size: 20px;
             vertical-align: top;
             font-style: italic;
+            color:(font_color)
+        }
+        QLabel#song{
+            padding: 0px;
+            font-family: Verdana, sans-serif;
+            font-size: 12px;
+            vertical-align: top;
             color:(font_color)
         }
         QLabel#numbers{

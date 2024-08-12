@@ -7,7 +7,8 @@ import numpy as np
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QLabel, QVBoxLayout, QHBoxLayout, QWidget,
     QSlider, QListWidget, QListWidgetItem, QPushButton, QDialog, QDialogButtonBox,
-    QVBoxLayout, QHBoxLayout, QMessageBox, QFileDialog, QLineEdit, QAbstractItemView, QSizePolicy,QFrame
+    QVBoxLayout, QHBoxLayout, QMessageBox, QFileDialog, QLineEdit, QAbstractItemView, 
+    QSizePolicy, QFrame
 )
 from PyQt6.QtGui import QPixmap, QFont, QPainter, QColor,QIcon
 from PyQt6.QtCore import Qt, QTimer, QSize, pyqtSignal
@@ -556,9 +557,14 @@ class CreatePlaylistDialog(QDialog):
         self.isEditing = (editing != None)
         self.view = editing
         
+        self.lastList = []
+        
+        self.available_song_list = []
+        self.added_songs_list = []
+        
         self.setWindowTitle(f"Create New Playlist")
 
-            
+        self.songs_path = resource_path('Songs')
         
         self.setGeometry(100, 100, 600, 300)
         
@@ -583,44 +589,53 @@ class CreatePlaylistDialog(QDialog):
             main_layout.addLayout(name_layout)
         # Add name layout to main layout
         
+        
+        
+
+        self.searchBar = QLineEdit()
+        self.searchBar.setPlaceholderText("Search for a Title, Artist, or Album")
+        self.searchBar.textChanged.connect(self.update_search)
+        main_layout.addWidget(self.searchBar)
 
         self.available_song_list_widget = QListWidget()
+        self.available_song_list_widget.setMinimumSize(600, 100)
         self.available_song_list_widget.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.available_song_list_widget.itemDoubleClicked.connect(self.add_song)
         layout.addWidget(self.available_song_list_widget)
 
-        self.added_song_list_widget = QListWidget()
-        self.added_song_list_widget.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        self.added_song_list_widget.itemDoubleClicked.connect(self.remove_song)
-        layout.addWidget(self.added_song_list_widget)
+        # self.added_song_list_widget = QListWidget()
+        # self.added_song_list_widget.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        # self.added_song_list_widget.itemDoubleClicked.connect(self.remove_song)
+        # layout.addWidget(self.added_song_list_widget)
         
         self.load_available_songs()
         if self.isEditing:
+            print("loading songs")
             self.load_added_songs()
+            
+        self.lastList = self.available_song_list
+            
+        self.load_song_list(self.available_song_list)
 
         buttons_layout = QVBoxLayout()
-
-        add_button = QPushButton("Add >")
-        add_button.setObjectName("smaller")
-        add_button.clicked.connect(self.add_song)
-        buttons_layout.addWidget(add_button)
-
-        remove_button = QPushButton("< Remove")
-        remove_button.setObjectName("smaller")
-        remove_button.clicked.connect(self.remove_song)
-        buttons_layout.addWidget(remove_button)
         
-        if self.isEditing:
-            del_button = QPushButton("Delete Playlist")
-            del_button.setObjectName("smaller")
-            del_button.clicked.connect(self.delete_playlist)
-            buttons_layout.addWidget(del_button)
         
-        layout.addLayout(buttons_layout)
-
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
             Qt.Orientation.Vertical, self)
+        
+        buttons_layout.addWidget(buttons)
+        
+
+
+        if self.isEditing:
+            del_button = QPushButton("Delete")
+            del_button.setObjectName("smaller")
+            del_button.clicked.connect(self.delete_playlist)
+            buttons_layout.addWidget(del_button)
+            
+        
+        layout.addLayout(buttons_layout)
         
         layout.addWidget(buttons)
         
@@ -634,39 +649,215 @@ class CreatePlaylistDialog(QDialog):
         
 
     def load_available_songs(self):
-        songs_path = resource_path('Songs')
-        for song_file in os.listdir(songs_path):
-            if song_file.endswith(('.mp3', '.flac', '.wav')):
-                self.available_song_list_widget.addItem(song_file)
+        
+        for song_file in os.listdir(self.songs_path):
+            if song_file.endswith(('.mp3', '.flac', '.wav','.aiff')):
+                title, artist, album = self.get_metadata(os.path.join(self.songs_path,song_file))
                 
+                self.available_song_list.append({"file":os.path.join(self.songs_path,song_file),"title":title, "artist":artist, "album":album})
+                
+    def load_song_list(self, song_list):
+        if song_list != None:
+            self.lastList = song_list
+        else:
+            song_list = self.lastList
+            
+        self.available_song_list_widget.clear()
+        
+        for song in song_list:
+            #self.available_song_list_widget.addItem(os.path.splitext(os.path.basename(song["file"]))[0])
+            
+            
+            item = QListWidgetItem()
+            item.setData(Qt.ItemDataRole.UserRole, song["file"])
+            item_widget = QWidget()
+            
+            line_text = QLabel(os.path.splitext(os.path.basename(song["file"]))[0])
+            line_text.setObjectName("song")
+            line_text.setSizePolicy(
+                QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+            )
+            
+            if self.already_added(song["file"]):
+                line_push_button = QPushButton('X')
+                line_push_button.setObjectName("remove")
+                line_push_button.clicked.connect(self.remove_song)
+                line_push_button.setSizePolicy(
+                    QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed
+                )
+                line_push_button.setProperty('item_data', song["file"])
+            else:
+                line_push_button = QPushButton('+')
+                line_push_button.setObjectName("add")
+                line_push_button.clicked.connect(self.add_song)
+                line_push_button.setSizePolicy(
+                    QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed
+                )
+                line_push_button.setProperty('item_data', song["file"])
+            
+            item_layout = QHBoxLayout()
+            item_layout.addWidget(line_text)
+            item_layout.addWidget(line_push_button)
+
+            item_widget.setLayout(item_layout)
+            
+            item.setSizeHint(QSize(item_widget.width()-100, 35))
+            self.available_song_list_widget.addItem(item)
+            self.available_song_list_widget.setItemWidget(item, item_widget)
+            
+            seperator = QListWidgetItem()
+            seperator.setSizeHint(QSize(0, 5))
+            seperator.setFlags(Qt.ItemFlag.NoItemFlags)
+            
+            self.available_song_list_widget.addItem(seperator)
+            
+            lineFrame = QFrame()
+            lineFrame.setFrameShape(QFrame.Shape.HLine)
+            lineFrame.setFrameShadow(QFrame.Shadow.Sunken)
+            
+            self.available_song_list_widget.setItemWidget(seperator, lineFrame)
+                
+                
+                
+    def already_added(self, to_check):
+        for song in self.added_songs_list:
+            if song["file"] == to_check:
+                return True
+        return False
+
+    
     def load_added_songs(self):
         playlist_path = os.path.join(resource_path('Playlists'), self.view)
         with open(playlist_path, "r", encoding = "utf-8") as file:
             for line in file:
-                song_path = line.strip()
-                if os.path.isfile(os.path.join(resource_path('Songs'), song_path)):
-                    self.selected_songs.append(song_path)
-                    self.added_song_list_widget.addItem(song_path)
+                line = line[:-1]
+                if line.endswith(('.mp3', '.flac', '.wav','.aiff')):
+                    title, artist, album = self.get_metadata(os.path.join(self.songs_path,line))
+                    
+                    self.added_songs_list.append({"file":os.path.join(self.songs_path,line),"title":title, "artist":artist, "album":album})
+        print(self.added_songs_list)
+                        
+    def non_exact_search(self, data, search_term):
+        results = []
+        print(data)
+        search_term_lower = search_term.lower()
+        
+        for entry in data:
+            for key, value in entry.items():
+                # Skip the key if it's "file"
+                if key == "file":
+                    continue
+                
+                # Check for the search term in the remaining values
+                if search_term_lower in value.lower():
+                    results.append(entry)
+                    break
+    
+        return results
+    
+    def update_search(self, text):
+        print(text)
+        search_results = self.non_exact_search(self.available_song_list, text)
+        self.load_song_list(search_results)
+
+
+    def get_metadata(self, song_path):
+        audio = File(song_path)
+        
+        title = os.path.splitext(song_path)[0]
+        artist = ""
+        album = ""
+        
+        if os.path.splitext(song_path)[1].lower() in [".mp3", ".flac", ".aiff"]: 
+            if audio:
+                title = audio.tags.get('TIT2', ['Unknown Title'])[0]
+                artist = audio.tags.get('TPE1', ['Unknown Artist'])[0]
+                album = audio.tags.get('TALB', ['Unknown Album'])[0]
+                
+                
+                pict= None
+                
+                if os.path.splitext(song_path)[1] == ".flac":
+                    
+                    
+                    var = FLAC(song_path)
+                    print("Song metadata: "+ str(var))
+                    
+                    try:
+                        artist = var['artist'][0]
+                    except KeyError:
+                        print("There was an error fetching song artist.")
+                        
+                                    
+                    try:
+                        title = var['title'][0]
+                    except KeyError:
+                        print("There was an error fetching song title")
+                        if title != 'Unknown Artist':
+                            title = os.path.splitext(os.path.basename(song_path))[0] 
+                    
+                    pics = var.pictures
+                    for p in pics:
+                        if p.type == 3: #front cover
+                            print("\nfound front cover") 
+                            with open("cover.jpg", "wb") as f:
+                                pict = (p.data)
+                    
+                    print(var)
+                    
+                    try:
+                        album = var["ALBUM"]
+                    except KeyError:
+                        album = "Unknown Album"
+        
+        return(title,artist,album[0])
+
 
     def add_song(self):
-        print("aDDING SONG")
-        selected_item = self.available_song_list_widget.currentItem()
-        if selected_item:
-            print("We are selected")
-            selected_song = selected_item.text()
-            song_path = os.path.join(resource_path('Songs'), selected_song)
-            song_name = os.path.basename(song_path)
-            print(song_name)
-            self.selected_songs.append(song_name)
-            print(self.selected_songs)
-            self.added_song_list_widget.addItem(song_name)
-        else:
-            return None
+        print("Adding song!")
+        button = self.sender()
+        
+        song_to_add = os.path.basename(button.property("item_data"))
+        
+        print("Adding song:" + str(song_to_add))
+        title, artist, album = self.get_metadata(os.path.join(self.songs_path,song_to_add))
+                
+        self.added_songs_list.append({"file":os.path.join(self.songs_path,song_to_add),"title":title, "artist":artist, "album":album})
+        
+        button.setText('X')
+        button.setObjectName("remove")
+        button.clicked.disconnect()  # Disconnect the add_song method
+        button.clicked.connect(self.remove_song)  # Connect to remove_song method
+        
+        button.setStyle(button.style())
+        
+        print(self.added_songs_list)
+
 
     def remove_song(self):
-        for item in self.added_song_list_widget.selectedItems():
-            self.added_song_list_widget.takeItem(self.added_song_list_widget.row(item))
-            self.selected_songs.remove(item.text())
+        print("Removing song!")
+        button = self.sender()
+        
+        song_to_remove = button.property("item_data")
+        
+        print("Removing song:" + str(song_to_remove))
+
+        tempSongs = []
+        
+        for song in self.added_songs_list:
+            if song["file"] != song_to_remove:
+                tempSongs.append(song)
+                
+        self.added_songs_list = tempSongs
+        
+        button.setText('+')
+        button.setObjectName("add")
+        button.clicked.disconnect()  # Disconnect the add_song method
+        button.clicked.connect(self.add_song)  # Connect to remove_song method
+        
+        button.setStyle(button.style())
+        
+        print(self.added_songs_list)
 
     def get_playlist_info(self):
         playlist_name = self.playlist_name_edit.text().strip()
@@ -691,9 +882,9 @@ class CreatePlaylistDialog(QDialog):
         if self.playlist_name_edit.text() == "" and self.isEditing:
             playlist_path = os.path.join(resource_path('Playlists'), f"{self.view}")
             with open(playlist_path, "w", encoding="utf-8") as f:
-                for song in self.selected_songs:
+                for song in self.added_songs_list:
                     print(song)
-                    f.write(fix_unicode(song) + "\n")
+                    f.write(fix_unicode(os.path.basename(song["file"])) + "\n")
         elif self.isEditing:
             playlist_path2 = os.path.join(resource_path('Playlists'), f"{self.view}")
             os.remove(playlist_path2)
@@ -718,9 +909,9 @@ class CreatePlaylistDialog(QDialog):
                 
             playlist_path = os.path.join(resource_path('Playlists'), f"{self.playlist_name_edit.text()}.txt")
             with open(playlist_path, "w", encoding = "utf-8") as f:
-                for song in self.selected_songs:
+                for song in self.added_songs_list:
                     print(song)
-                    f.write(fix_unicode(song) + "\n")
+                    f.write(fix_unicode(os.path.basename(song["file"])) + "\n")
         else:
             for playlist_path in os.listdir(playlist_path):
                 print(os.path.splitext(playlist_path)[0])
@@ -739,12 +930,20 @@ class CreatePlaylistDialog(QDialog):
                 error_popup.setText("You've entered an empty name field. While it might technically work, I'm not about to test the limitations of my code.")
                 error_popup.exec()
                 return
-                
-            playlist_path = os.path.join(resource_path('Playlists'), f"{self.playlist_name_edit.text()}.txt")
-            with open(playlist_path, "w", encoding = "utf-8") as f:
-                for song in self.selected_songs:
-                    print(song)
-                    f.write(fix_unicode(song) + "\n")
+            
+            try:
+                playlist_path = os.path.join(resource_path('Playlists'), f"{self.playlist_name_edit.text()}.txt")
+                with open(playlist_path, "w", encoding = "utf-8") as f:
+                    for song in self.added_songs_list:
+                        print(song)
+                        f.write(fix_unicode(os.path.basename(song["file"])) + "\n")
+            except OSError:
+                error_popup = QMessageBox()
+                error_popup.setIcon(QMessageBox.Icon.Warning)
+                error_popup.setWindowTitle("Error")
+                error_popup.setText("Forbidden character detected! Name cannot contain the following characters: < > : \" / \\ | ? *")
+                error_popup.exec()
+                return
                 
                 
                         
