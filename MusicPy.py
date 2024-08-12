@@ -22,6 +22,7 @@ import atexit
 import shutil 
 import codecs
 from Updater import GitUpdater
+import ctypes
 
 try:
     import vlc
@@ -69,6 +70,8 @@ def fix_unicode(s):
         resource_path("Songs")
         return (ret)
 
+def set_app_user_model_id(app_id):
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(app_id)
     
 settings_template = {}
 
@@ -1044,7 +1047,7 @@ def exit_handler():
 if __name__ == '__main__':
     
 
-    
+    set_app_user_model_id("com.musicmanager.myapp")
         
     
     utility_path = resource_path('Utility')
