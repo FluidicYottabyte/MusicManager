@@ -452,10 +452,16 @@ class MusicPlayer(QMainWindow):
                         img_file.write(pict)
                     pixmap = QPixmap(os.path.join(self.utilities, "album-art.jpg"))
                     self.album_art.setPixmap(pixmap)
+                    print("Picture done")
                 else:
+                    print("no picture found")
                     self.album_art.clear()
+                    pixmap = QPixmap(os.path.join(self.utilities, "default.png"))
+                    self.album_art.setPixmap(pixmap)
+                    print("cleared picture")
                 
                 self.song_details.setText(f"{title}\nBy {artist}")
+                print(" set song details")
         else:
             self.song_details.setText(os.path.splitext(os.path.basename(song_path))[0]) 
             pixmap = QPixmap(os.path.join(self.utilities, "default.png"))
