@@ -1,84 +1,81 @@
 import os
 import subprocess
-import hashlib
 
-# Define the GitHub repository URL and branch
-GITHUB_REPO_URL = 'https://github.com/username/repo_name'
-BRANCH = 'main'
+class GitUpdater:
+    def __init__(self, repo_dir=None):
+        """
+        Initializes the GitUpdater class.
 
-newpath = os.path.join(os.path.curdir,"UpdatingRepo") 
-if not os.path.exists(newpath):
-    os.makedirs(newpath)
+        Parameters:
+        repo_dir (str): The directory of the git repository. Defaults to the current directory.
+        """
+        self.repo_dir = repo_dir if repo_dir else os.getcwd()
 
-# Define the local directory where the repository will be cloned/pulled
-REPO_DIR = newpath
+    def run_git_command(self, command):
+        """
+        Runs a git command and returns the output.
 
-# Define the local directory where the files will be checked
+        Parameters:
+        command (list): The git command to run.
 
+        Returns:
+        tuple: stdout and stderr output from the git command.
+        """
+        result = subprocess.run(command, cwd=self.repo_dir, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        return result.stdout.strip(), result.stderr.strip()
 
-LOCAL_DIR = "/"
+    def fetch_updates(self):
+        """
+        Fetches the latest changes from the remote repository.
+        """
+        print("Fetching the latest changes...")
+        stdout, stderr = self.run_git_command(['git', 'fetch'])
+        
+        if stderr:
+            print(f"Error during fetch: {stderr}")
+        else:
+            print(stdout)
 
-# Function to calculate the hash of a file
-def calculate_file_hash(file_path):
-    hasher = hashlib.md5()
-    with open(file_path, 'rb') as f:
-        buf = f.read()
-        hasher.update(buf)
-    return hasher.hexdigest()
+    def check_for_updates(self):
+        """
+        Checks if the local branch is behind the remote branch.
 
-# Function to compare two files based on their hashes
-def compare_files(file1, file2):
-    return calculate_file_hash(file1) == calculate_file_hash(file2)
+        Returns:
+        bool: True if updates are available, False otherwise.
+        """
+        print("Checking for differences...")
+        stdout, stderr = self.run_git_command(['git', 'status', '-uno'])
+        
+        if "Your branch is behind" in stdout:
+            return True
+        elif stderr:
+            print(f"Error during status check: {stderr}")
+        return False
 
-# Function to get a list of ignored files based on .gitignore
-def get_ignored_files(repo_dir):
-    gitignore_path = os.path.join(repo_dir, '.gitignore')
-    ignored_files = set()
+    def pull_updates(self):
+        """
+        Pulls the latest changes from the remote repository if updates are available.
+        """
+        if self.check_for_updates():
+            print("Updates are available. Pulling the latest changes...")
+            stdout, stderr = self.run_git_command(['git', 'pull'])
+            
+            if stderr:
+                print(f"Error during pull: {stderr}")
+            else:
+                print(stdout)
+        else:
+            print("The local repository is up to date.")
 
-    if os.path.exists(gitignore_path):
-        with open(gitignore_path, 'r') as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith('#'):
-                    ignored_files.add(line)
-    return ignored_files
+    def update(self):
+        """
+        Executes the full update process: fetch, check, and pull updates if necessary.
+        """
+        self.fetch_updates()
+        self.pull_updates()
+        print('Update process completed.')
 
-# Function to find all files in a directory, excluding ignored files
-def find_files_to_check(local_dir, ignored_files):
-    files_to_check = []
-
-    for root, _, files in os.walk(local_dir):
-        for file in files:
-            rel_dir = os.path.relpath(root, local_dir)
-            rel_file = os.path.join(rel_dir, file)
-
-            if not any(rel_file.startswith(ignored) for ignored in ignored_files):
-                files_to_check.append(rel_file)
-    
-    return files_to_check
-
-# Clone the repository if it doesn't exist, otherwise pull the latest changes
-if not os.path.exists(REPO_DIR):
-    subprocess.run(['git', 'clone', GITHUB_REPO_URL, REPO_DIR])
-else:
-    subprocess.run(['git', '-C', REPO_DIR, 'pull', 'origin', BRANCH])
-
-# Get ignored files from .gitignore
-ignored_files = get_ignored_files(REPO_DIR)
-
-# Find all files to check, excluding ignored files
-files_to_check = find_files_to_check(LOCAL_DIR, ignored_files)
-
-# Check and update each file
-for rel_file in files_to_check:
-    local_file = os.path.join(LOCAL_DIR, rel_file)
-    github_file = os.path.join(REPO_DIR, rel_file)
-
-    if os.path.exists(local_file) and os.path.exists(github_file) and compare_files(local_file, github_file):
-        print(f'{local_file} is up to date.')
-    else:
-        print(f'{local_file} is outdated or missing. Updating...')
-        os.makedirs(os.path.dirname(local_file), exist_ok=True)
-        subprocess.run(['cp', github_file, local_file])
-
-print('Update process completed.')
+# Example usage (from another script in the same directory):
+# from git_updater import GitUpdater
+# updater = GitUpdater()
+# updater.update()

@@ -21,6 +21,7 @@ import json
 import atexit
 import shutil 
 import codecs
+from Updater import GitUpdater
 
 try:
     import vlc
@@ -87,6 +88,22 @@ class MusicPlayer(QMainWindow):
         
         super().__init__()
         
+        self.updater = GitUpdater()
+        
+        if self.updater.check_for_updates():
+            error_popup = QMessageBox()
+            error_popup.setIcon(QMessageBox.Icon.Information)
+            error_popup.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            error_popup.setWindowTitle("Update Available")
+            error_popup.setText("An update to Music Manager has been detected. Would you like to update? (you will need to manually restart Music Manager to see effects.)")
+            response = error_popup.exec()
+            
+            if response == QMessageBox.StandardButton.Yes:
+                print("User clicked Yes")
+                self.updater.update()
+            else:
+                print("User clicked No")
+    
         self.utilities = resource_path('Utility')
         
         self.setWindowTitle('Music Manager')
@@ -1025,6 +1042,11 @@ def exit_handler():
             
             
 if __name__ == '__main__':
+    
+
+    
+        
+    
     utility_path = resource_path('Utility')
     style_path = os.path.join(utility_path, f"Style.txt")
     settings = None
