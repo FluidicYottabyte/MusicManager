@@ -47,10 +47,10 @@ class GitUpdater:
         stdout, stderr = self.run_git_command(['git', 'status', '-uno'])
         
         if "Your branch is behind" in stdout:
-            return True
+            return False
         elif stderr:
             print(f"Error during status check: {stderr}")
-        return False
+        return True
 
     def pull_updates(self):
         """
