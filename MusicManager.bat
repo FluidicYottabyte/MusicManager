@@ -1,3 +1,3 @@
 @echo off
-start "" pythonw "MusicPy.pyw"
+start "" pythonw "MusicPy.py"
 exit
