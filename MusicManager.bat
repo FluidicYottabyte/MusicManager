@@ -1,2 +1,3 @@
 @echo off
-python MusicPy.py
+start "" pythonw "MusicPy.pyw"
+exit
