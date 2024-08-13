@@ -94,6 +94,8 @@ class MusicPlayer(QMainWindow):
         self.updater = GitUpdater()
         
         if self.updater.check_for_updates():
+            print("Behind")
+            
             error_popup = QMessageBox()
             error_popup.setIcon(QMessageBox.Icon.Information)
             error_popup.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
