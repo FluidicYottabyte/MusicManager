@@ -56,7 +56,7 @@ class GitUpdater:
         """
         Pulls the latest changes from the remote repository if updates are available.
         """
-        if self.check_for_updates():
+        if not self.check_for_updates():
             print("Updates are available. Pulling the latest changes...")
             stdout, stderr = self.run_git_command(['git', 'pull'])
             
