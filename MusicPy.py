@@ -1047,10 +1047,7 @@ def exit_handler():
             
             
 if __name__ == '__main__':
-    
-    
-    print("poopy caca")
-    
+        
     set_app_user_model_id("com.musicmanager.myapp")
         
     
