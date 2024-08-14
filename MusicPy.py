@@ -79,9 +79,6 @@ settings_template["settings"] = {}
 settings_template["settings"]["volume"] = 50
 settings_template["settings"]["text_color"] = '#000000'
 
-system_volume = 50
-
-
 
 class MusicPlayer(QMainWindow):
     
@@ -175,9 +172,9 @@ class MusicPlayer(QMainWindow):
         self.volume_slider = QSlider(Qt.Orientation.Horizontal)
         self.volume_slider.setRange(0, 100)
         self.volume_slider.setFixedWidth(200)
-        self.volume_slider.setValue(settings["volume"])  # Default volume level
+        self.volume_slider.setValue(settings["settings"]["volume"])  # Default volume level
         
-        system_volume = settings["volume"]
+        self.system_volume = settings["settings"]["volume"]
         
         self.volume_slider.valueChanged.connect(self.change_volume)
         self.song_info_layout.addWidget(self.volume_slider)
@@ -258,7 +255,7 @@ class MusicPlayer(QMainWindow):
         self.current_playlist = []
         self.current_index = -1
         
-        self.change_volume(system_volume)
+        self.change_volume(self.system_volume)
         
     
     
@@ -303,8 +300,8 @@ class MusicPlayer(QMainWindow):
 
     def change_volume(self, value):
         self.player.audio_set_volume(value)
-        global system_volume
-        system_volume = value
+        self.system_volume = value
+        settings["settings"]["volume"] = value
         print(f"Volume set to: {value}")
         
 
@@ -372,6 +369,8 @@ class MusicPlayer(QMainWindow):
         # Retrieve the data stored in the button
         playlist_file = button.property('item_data')
         self.load_songs_from_playlist(playlist_file)
+
+        
         self.play_song()
 
     def load_songs_from_playlist(self, playlist_file):
@@ -386,6 +385,9 @@ class MusicPlayer(QMainWindow):
 
     
     def play_song(self):
+        
+        
+        
         if not self.current_playlist:
             return
 
@@ -405,13 +407,20 @@ class MusicPlayer(QMainWindow):
 
         self.player.set_media(media)
         
-        self.player.play()
-        self.timer.start()
+        print("System volume: "+str(self.system_volume))
         
-        self.stopped = False
+        self.player.play()
+        
+        self.timer.start()
         
         self.load_song_metadata(song_full_path)
         self.update_progress()
+        
+        time.sleep(.001)
+        
+        self.player.audio_set_volume(self.system_volume)
+        
+        self.stopped = False
 
     def load_song_metadata(self, song_path):
         audio = File(song_path)
@@ -512,6 +521,7 @@ class MusicPlayer(QMainWindow):
             self.play_song()
 
     def shuffle_songs(self):
+        self.saved_position = 0
         if self.current_playlist:
             random.shuffle(self.current_playlist)
             self.current_index = 0
@@ -1036,9 +1046,7 @@ class DragDropWidget(QWidget):
 def exit_handler():
     print("closing musicmanager")
         
-    with open(os.path.join(utility_path,'Settings.json')) as f:
-        data = json.load(f)
-
+    print(settings)
     with open(os.path.join(utility_path,'Settings.json'),"w") as f:
         json.dump(settings, f)
         
@@ -1092,7 +1100,7 @@ if __name__ == '__main__':
         app.setStyleSheet(style)
         
     app.setWindowIcon(QIcon(os.path.join(utility_path,"AppIcon.png")))
-    player = MusicPlayer(settings["settings"])
+    player = MusicPlayer(settings)
     player.show()
     atexit.register(exit_handler)
     sys.exit(app.exec())
