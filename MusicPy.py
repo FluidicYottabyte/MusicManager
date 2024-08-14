@@ -93,7 +93,7 @@ class MusicPlayer(QMainWindow):
         
         self.updater = GitUpdater()
         
-        if self.updater.check_for_updates():
+        if not self.updater.check_for_updates():
             print("Behind")
             
             error_popup = QMessageBox()
