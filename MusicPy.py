@@ -11,7 +11,8 @@ from PyQt6.QtWidgets import (
     QSizePolicy, QFrame
 )
 from PyQt6.QtGui import QPixmap, QFont, QPainter, QColor,QIcon
-from PyQt6.QtCore import Qt, QTimer, QSize, pyqtSignal
+from PyQt6.QtCore import Qt, QTimer, QSize, pyqtSignal, QThread
+from PyQt6 import QtCore
 from mutagen import File
 from mutagen.flac import FLAC, Picture
 from PIL import Image
@@ -23,6 +24,17 @@ import shutil
 import codecs
 from Updater import GitUpdater
 import ctypes
+import threading
+from queue import Queue
+
+import asyncio
+
+
+from aioslsk.search.model import SearchRequest
+from aioslsk.commands import GetUserStatusCommand
+from aioslsk.user.model import UserStatus
+
+from SoulseekManager import Soulseek
 
 try:
     import vlc
@@ -78,6 +90,8 @@ settings_template = {}
 settings_template["settings"] = {}
 settings_template["settings"]["volume"] = 50
 settings_template["settings"]["text_color"] = '#000000'
+settings_template["settings"]["slskusername"] = ''
+settings_template["settings"]["slskpassword"] = ''
 
 
 class MusicPlayer(QMainWindow):
@@ -206,8 +220,25 @@ class MusicPlayer(QMainWindow):
         self.shuffle_button.clicked.connect(self.shuffle_songs)
         self.control_layout.addWidget(self.shuffle_button)
 
+
+        #Additional Buttons
+        
+        self.additionalButtonsLayout = QHBoxLayout()
+        
+        self.soulseek_open = QPushButton("Connect to Soulseek")
+        self.soulseek_open.clicked.connect(self.openSoulseek)
+        self.additionalButtonsLayout.addWidget(self.soulseek_open)
+        
+        self.soulseek_open = QPushButton("Search library")
+        self.soulseek_open.clicked.connect(self.openSoulseek)
+        self.additionalButtonsLayout.addWidget(self.soulseek_open)
+        
+
         # Playlists
         self.PLaylistLayout = QVBoxLayout()
+        
+        self.PLaylistLayout.addLayout(self.additionalButtonsLayout)
+        
         self.playlist_widget = QListWidget()
         self.playlist_widget.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         
@@ -555,6 +586,10 @@ class MusicPlayer(QMainWindow):
         dialog.exec()
         self.load_playlists()
 
+    def openSoulseek(self):
+        
+        localSoulseek = SoulseekConnect(self, settings=settings)
+        localSoulseek.exec()
 
 
 
@@ -695,6 +730,8 @@ class CreatePlaylistDialog(QDialog):
                 self.available_song_list.append({"file":os.path.join(self.songs_path,song_file),"title":title, "artist":artist, "album":album})
                 
     def load_song_list(self, song_list):
+        self.available_song_list_widget.setUpdatesEnabled(False)
+
         if song_list != None:
             self.lastList = song_list
         else:
@@ -703,7 +740,6 @@ class CreatePlaylistDialog(QDialog):
         self.available_song_list_widget.clear()
         
         for song in song_list:
-            #self.available_song_list_widget.addItem(os.path.splitext(os.path.basename(song["file"]))[0])
             
             
             item = QListWidgetItem()
@@ -754,6 +790,8 @@ class CreatePlaylistDialog(QDialog):
             lineFrame.setFrameShadow(QFrame.Shadow.Sunken)
             
             self.available_song_list_widget.setItemWidget(seperator, lineFrame)
+        
+        self.available_song_list_widget.setUpdatesEnabled(True)
                 
                 
                 
@@ -986,6 +1024,532 @@ class CreatePlaylistDialog(QDialog):
                 
                         
         self.accept()
+
+
+
+
+class InputMessageBox(QMessageBox):
+    def __init__(self):
+        super().__init__()
+        
+        self.setWindowTitle("Input Dialog")
+        
+        # Create layout
+        layout = QVBoxLayout()
+        
+        # Create two QLineEdit widgets
+        self.textInfo = QLabel("Login:")
+
+        
+        self.input1 = QLineEdit(self)
+        self.input1.setPlaceholderText("Username")
+        self.input2 = QLineEdit(self)
+        self.input2.setPlaceholderText("Password")
+        
+        # Add QLineEdit widgets to layout
+        layout.addWidget(self.textInfo)
+        layout.addWidget(self.input1)
+        layout.addWidget(self.input2)
+        
+        # Set the layout to the message box
+        self.layout().addLayout(layout, 0, 0)
+        
+        # Add standard buttons (OK and Cancel)
+        self.addButton(QMessageBox.StandardButton.Ok)
+        self.addButton(QMessageBox.StandardButton.Cancel)
+        
+        # Connect buttons to functions
+        self.button(QMessageBox.StandardButton.Ok).clicked.connect(self.accept)
+        self.button(QMessageBox.StandardButton.Cancel).clicked.connect(self.reject)
+
+    def getInputs(self):
+        # Return the text entered in the QLineEdit widgets
+        return self.input1.text(), self.input2.text()
+
+
+
+
+
+class LoadingWorker(QThread):
+    beginloading = pyqtSignal()
+    finished = pyqtSignal()
+    send_song = pyqtSignal(list)
+    send_to_main_thread = pyqtSignal(object)
+
+    def __init__(self, loading_queue, loaded_songs_queue, adding_song_funct):
+        super().__init__()
+        self.loading_queue = loading_queue
+        self.loaded_songs_queue = loaded_songs_queue
+        self.add_song = adding_song_funct
+
+    def enqueuesongs(self, songs):
+        self.loading_queue.put(songs)
+
+
+    def run(self):
+        while not self.loading_queue.empty():
+                
+                
+            task, args = self.loading_queue.get()
+            if task:
+                print("Got task!: "+ str(task))
+            if task is None:
+                break
+            try:
+                task(*args)
+            except Exception as e:
+                print(f"Exception: {e}")
+            finally:
+                print("Finished task")
+                self.loading_queue.task_done()
+                print("Sent task")
+
+        print("Queue empty")
+        self.finished.emit()
+
+
+
+    def load_song_list(self, song_list):
+        widget_items_to_return = []
+
+        for song in song_list:
+            item = QListWidgetItem()
+            item.setData(Qt.ItemDataRole.UserRole, song["title"])
+            item_widget = QWidget()
+
+            line_text = QLabel(os.path.splitext(os.path.basename(song["title"]))[0])
+            line_text.setObjectName("song")
+            line_text.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+
+            line_push_button = QPushButton(u'\u2913')
+            line_push_button.setObjectName("add")
+            line_push_button.clicked.connect(self.add_song)
+            line_push_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+            line_push_button.setProperty('item_data', song)
+
+            item_layout = QHBoxLayout()
+            item_layout.addWidget(line_text)
+            item_layout.addWidget(line_push_button)
+
+            item_widget.setLayout(item_layout)
+            item.setSizeHint(QSize(item_widget.width() - 100, 35))
+
+            self.send_to_main_thread.emit([item, item_widget])
+            #self.loaded_songs_queue.put([item, item_widget])
+
+            separator = QListWidgetItem()
+            separator.setSizeHint(QSize(0, 5))
+            separator.setFlags(Qt.ItemFlag.NoItemFlags)
+
+            line_frame = QFrame()
+            line_frame.setFrameShape(QFrame.Shape.HLine)
+            line_frame.setFrameShadow(QFrame.Shadow.Sunken)
+
+            #self.loaded_songs_queue.put([separator, line_frame])
+            self.send_to_main_thread.emit([separator, line_frame])
+
+
+
+
+
+
+
+
+class SoulseekConnect(QDialog):
+    def __init__(self, parent, settings):
+        super().__init__(parent)
+        
+        if settings["settings"]["slskusername"] == '':
+            msg_box = InputMessageBox()
+            result = msg_box.exec()
+            print(result)
+            if result == 1:
+                input1, input2 = msg_box.getInputs()
+                
+                settings["settings"]["slskusername"] = input1
+                settings["settings"]["slskpassword"] = input2
+                print("Got username and password as: "+str(input1) + " and "+str(input2))
+            else:
+                print("Cancelled")
+                self.reject()
+                return
+                
+        
+        self.soul_seek_client = Soulseek(username= settings["settings"]["slskusername"], password= settings["settings"]["slskpassword"])
+        
+        #asyncio.run(self.runAsync())
+        
+        self.selected_songs = []
+        
+        self.lastList = []
+        
+        self.available_song_list = []
+        self.added_songs_list = []
+        
+        self.loading_queue = Queue()
+        self.loaded_songs_queue = Queue()
+        
+        
+        
+        
+        
+        self.setWindowTitle(f"Soulseek Manager")
+
+        self.songs_path = resource_path('Songs')
+        
+        self.setGeometry(100, 100, 600, 300)
+        
+        layout = QHBoxLayout()
+        main_layout = QVBoxLayout()
+        
+
+        name_layout = QHBoxLayout()
+        playlist_name_label = QLabel("Search Soulseek:")
+        name_layout.addWidget(playlist_name_label)
+        main_layout.addLayout(name_layout)
+
+        # Add name layout to main layout
+        
+        
+        self.searchWidget = QHBoxLayout()
+
+        self.searchBar = QLineEdit()
+        self.searchBar.setPlaceholderText("Search for a Title, Artist, or Album")
+        self.searchWidget.addWidget(self.searchBar)
+        
+        self.searchButton = QPushButton("Search")
+        self.searchButton.clicked.connect(self.update_search)
+        self.searchWidget.addWidget(self.searchButton)
+        
+        main_layout.addLayout(self.searchWidget)
+
+        self.available_song_list_widget = QListWidget()
+        self.available_song_list_widget.setMinimumSize(600, 100)
+        self.available_song_list_widget.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.available_song_list_widget.itemDoubleClicked.connect(self.add_song)
+        layout.addWidget(self.available_song_list_widget)
+        
+        self.available_song_list_widget.verticalScrollBar().valueChanged.connect(self.scrolled)
+
+        # self.added_song_list_widget = QListWidget()
+        # self.added_song_list_widget.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        # self.added_song_list_widget.itemDoubleClicked.connect(self.remove_song)
+        # layout.addWidget(self.added_song_list_widget)
+        
+        #self.load_available_songs()
+
+        self.load_added_songs()
+            
+        self.lastList = self.available_song_list
+        
+        buttons_layout = QVBoxLayout()
+        
+        
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
+            Qt.Orientation.Vertical, self)
+        
+        buttons_layout.addWidget(buttons)
+            
+        
+        layout.addLayout(buttons_layout)
+        
+        layout.addWidget(buttons)
+        
+        buttons.accepted.connect(self.save_and_close)
+        buttons.rejected.connect(self.reject)
+        
+        main_layout.addLayout(layout)
+        
+        self.setLayout(main_layout)
+        
+        
+    def scrolled(self, value):
+
+        if value == self.available_song_list_widget.verticalScrollBar().maximum():
+             self.waiting_loader()
+        
+    async def searchAsync(self, toSearch):
+        # Run the synchronous search method in an executor to avoid blocking the event loop
+        loop = asyncio.get_event_loop()
+        results = await loop.run_in_executor(None, self.soul_seek_client.search, toSearch)
+        print("GOT RESULTS ON CLIENT SIDE")
+        return results
+    
+    async def downloadAsynch(self, downloadinfo):
+        loop = asyncio.get_event_loop()
+        results = await loop.run_in_executor(None, self.soul_seek_client.download, downloadinfo["user"], downloadinfo["file"])
+        print("Got results for download in main")
+        return results
+
+    def load_available_songs(self):
+
+        for song_file in os.listdir(self.songs_path):
+            if song_file.endswith(('.mp3', '.flac', '.wav','.aiff')):
+                title, artist, album = self.get_metadata(os.path.join(self.songs_path,song_file))
+                
+                self.available_song_list.append({"file":os.path.join(self.songs_path,song_file),"title":title, "artist":artist, "album":album})
+                
+                
+    def loading_thread(self, songstoload):
+        print("creating thread")
+        
+        
+        with self.loading_queue.mutex:
+            self.loading_queue.queue.clear()
+
+        with self.loaded_songs_queue.mutex:
+            self.loaded_songs_queue.queue.clear()
+
+        
+        self.loadingthread = QThread()
+        self.worker = LoadingWorker(self.loading_queue, self.loaded_songs_queue, self.add_song)
+        self.worker.send_to_main_thread.connect(self.handle_object_from_worker)
+        self.worker.beginloading.connect(self.worker.run)
+        self.worker.send_song.connect(self.worker.enqueuesongs)
+        self.worker.finished.connect(self.waiting_loader)
+        self.worker.moveToThread(self.loadingthread)
+        #self.loadingthread.started.connect(self.loadingthread.run)
+        self.loadingthread.start()
+        
+        print("started thread")
+        
+        """ self.loadingThread = QThread(target=self.loading_thread_target)
+        self.loadingThread.start() """
+        self.loading_manager(songstoload)
+        
+        
+        
+    def handle_object_from_worker(self, obj):
+        print("Got objects in main thread!")
+        self.loaded_songs_queue.put(obj)
+        
+    def waiting_loader(self):
+        self.loadingthread.quit()
+        
+        self.available_song_list_widget.setUpdatesEnabled(True)
+        print("Initializing waiting loader")
+        
+        song_limit = 50
+        
+        time.sleep(.01)
+        
+        if self.loaded_songs_queue.empty():
+            print("No songs returned")
+            return
+        
+        for item in range(song_limit):
+            preloaded_songs = self.loaded_songs_queue.get()
+            print(preloaded_songs)
+            item = preloaded_songs[0]
+            iteamdeclaration = preloaded_songs[1]
+            
+            self.available_song_list_widget.addItem(item)
+            self.available_song_list_widget.setItemWidget(item,iteamdeclaration)
+
+            
+        print("Finished loading songs into ui")
+            
+            
+                
+             
+    def loading_thread_target(self):
+        while True:
+            task, args = self.loading_queue.get()
+            if task:
+                print("Got task: " + str(task))
+            else:
+                time.sleep(.01)
+                print("no task")
+                
+            try:
+                task(*args)
+                #self.loaded_songs_queue.put(result)
+            except Exception as e:
+                #self.loaded_songs_queue.put(e)
+                raise e
+            finally:
+                self.loading_queue.task_done()
+
+                
+    def loading_manager(self, result_list):
+        
+        runningTime = 0
+        print(len(result_list))
+        while len(result_list) > 0:
+            runningTime +=1
+            print(len(result_list))
+            if len(result_list) <= 10:
+                self.loading_queue.put((self.worker.load_song_list, [result_list]))
+                self.worker.send_song.emit((self.worker.load_song_list, [result_list]))
+                del result_list[:len(result_list)]
+            else:
+                self.loading_queue.put((self.worker.load_song_list, [result_list[:10]]))
+                self.worker.send_song.emit((self.worker.load_song_list, [result_list[:10]]))
+                del result_list[:10]
+        
+        print("finished populating loading thread queue after running "+str(runningTime)+" times")
+        self.worker.beginloading.emit()
+                
+        
+                
+                
+                
+    def already_added(self, to_check):
+        for song in self.added_songs_list:
+            if song["file"] == to_check:
+                return True
+        return False
+
+    
+    def load_added_songs(self):
+        for song in self.songs_path:
+            if song.endswith(('.mp3', '.flac', '.wav','.aiff')):
+                title, artist, album = self.get_metadata(os.path.join(self.songs_path,song))
+                
+                self.added_songs_list.append({"file":os.path.join(self.songs_path,song),"title":title, "artist":artist, "album":album})
+
+                        
+    async def ParseSearch(self, term):
+        results = await self.searchAsync(term)
+        
+        print("Aquired search information!")
+        
+        sortedResultList = []
+        
+        for userResult in results:
+            #UserCheck = self.soul_seek_client.getUserStatus(userResult.username)
+            #print(str(UserCheck))
+            for item in userResult.shared_items:
+
+                sortedResultList.append({"file":item.filename,"user":userResult.username,"title":os.path.basename(item.filename)})
+                print(item.filename)
+        
+        print("Finished parsing search")
+        
+        return sortedResultList
+    
+    def update_search(self):
+        text = self.searchBar.text()
+        self.available_song_list_widget.clear()
+        print(text)
+        
+        search_results = asyncio.run(self.ParseSearch(text))
+        print(search_results)
+        self.loading_thread(search_results)
+
+
+    def get_metadata(self, song_path):
+        audio = File(song_path)
+        
+        title = os.path.splitext(song_path)[0]
+        artist = ""
+        album = ""
+        
+        if os.path.splitext(song_path)[1].lower() in [".mp3", ".flac", ".aiff"]: 
+            if audio:
+                title = audio.tags.get('TIT2', ['Unknown Title'])[0]
+                artist = audio.tags.get('TPE1', ['Unknown Artist'])[0]
+                album = audio.tags.get('TALB', ['Unknown Album'])[0]
+                
+                
+                pict= None
+                
+                if os.path.splitext(song_path)[1] == ".flac":
+                    
+                    
+                    var = FLAC(song_path)
+                    print("Song metadata: "+ str(var))
+                    
+                    try:
+                        artist = var['artist'][0]
+                    except KeyError:
+                        print("There was an error fetching song artist.")
+                        
+                                    
+                    try:
+                        title = var['title'][0]
+                    except KeyError:
+                        print("There was an error fetching song title")
+                        if title != 'Unknown Artist':
+                            title = os.path.splitext(os.path.basename(song_path))[0] 
+                    
+                    pics = var.pictures
+                    for p in pics:
+                        if p.type == 3: #front cover
+                            print("\nfound front cover") 
+                            with open("cover.jpg", "wb") as f:
+                                pict = (p.data)
+                    
+                    print(var)
+                    
+                    try:
+                        album = var["ALBUM"]
+                    except KeyError:
+                        album = "Unknown Album"
+        
+        return(title,artist,album[0])
+
+    async def download_buffer(self, info):
+        return await self.downloadAsynch(info)
+
+
+    def add_song(self):
+        print("Downloading song!")
+        button = self.sender()
+        
+        song_to_add = (button.property("item_data"))
+        print(song_to_add)
+        
+        transfer = asyncio.run(self.download_buffer(song_to_add))
+        
+        print(transfer)
+        
+        button.setText('X')
+        button.setProperty("transfer_id", transfer)
+        button.setObjectName("remove")
+        button.clicked.disconnect()  # Disconnect the add_song method
+        button.clicked.connect(self.stop_song_download)  # Connect to remove_song method
+        
+        button.setStyle(button.style())
+        
+
+
+    def stop_song_download(self):
+        print("Stopping song download!")
+        button = self.sender()
+        
+        download_to_stop = button.property("transfer_id")
+        
+        self.soul_seek_client.stopDownload(download_to_stop)
+        
+        button.setText(u'\u2913')
+        button.setObjectName("add")
+        button.clicked.disconnect()  # Disconnect the add_song method
+        button.clicked.connect(self.add_song)  # Connect to remove_song method
+        
+        button.setStyle(button.style())
+        
+        print(self.added_songs_list)
+    
+    def save_and_close(self):
+        """ 
+            Playlists are formatted as such:
+            Filename = Playlist name
+            Every line is the name of a song from the songs folder
+        
+        """
+        
+        """ error_popup = QMessageBox()
+        error_popup.setIcon(QMessageBox.Icon.Warning)
+        error_popup.setWindowTitle("Error")
+        error_popup.setText("One or more playlists already have this name! Please choose a new name.")
+        error_popup.exec()
+        return """
+                
+        self.accept()
+
+
 
 
 class DragDropWidget(QWidget):
