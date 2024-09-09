@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QLabel, QVBoxLayout, QHBoxLayout, QWidget,
     QSlider, QListWidget, QListWidgetItem, QPushButton, QDialog, QDialogButtonBox,
     QVBoxLayout, QHBoxLayout, QMessageBox, QFileDialog, QLineEdit, QAbstractItemView, 
-    QSizePolicy, QFrame
+    QSizePolicy, QFrame, QProgressBar
 )
 from PyQt6.QtGui import QPixmap, QFont, QPainter, QColor,QIcon
 from PyQt6.QtCore import Qt, QTimer, QSize, pyqtSignal, QThread
@@ -33,6 +33,8 @@ import asyncio
 from aioslsk.search.model import SearchRequest
 from aioslsk.commands import GetUserStatusCommand
 from aioslsk.user.model import UserStatus
+from aioslsk.transfer.model import Transfer, TransferDirection
+
 
 from SoulseekManager import Soulseek
 
@@ -589,10 +591,31 @@ class MusicPlayer(QMainWindow):
     def openSoulseek(self):
         
         localSoulseek = SoulseekConnect(self, settings=settings)
+        localSoulseek.closing_event.connect(self.being_background_downloads)
         localSoulseek.exec()
 
+    def being_background_downloads(self, SoulseekPassed : Soulseek, totalDownloads):
+        self.download_thread = DownloadThread(SoulseekPassed, totalDownloads)
+        
+        # Connect the progress and finished signals to appropriate slots
+        #self.download_thread.progress_updated.connect(self.on_progress_updated)
+        self.download_thread.finished.connect(self.on_downloads_complete)
+        
+        # Start the download thread
+        self.download_thread.start()
 
-
+    def on_downloads_complete(self, info):
+        print("DOWNLOADS DONE")
+        
+        error_popup = QMessageBox()
+        error_popup.setIcon(QMessageBox.Icon.Information)
+        error_popup.setWindowTitle("Downloads Complete")
+        if info["failed"] > 0:
+            error_popup.setText(f"Downloads completed with {info['failed']} failed downloads.")
+        else:
+            error_popup.setText("Downloads completed with no issues!")
+        
+        error_popup.exec()
 
 
 
@@ -1156,6 +1179,11 @@ class LoadingWorker(QThread):
 
 
 class SoulseekConnect(QDialog):
+    
+    
+    closing_event = pyqtSignal(Soulseek, int)
+    
+    
     def __init__(self, parent, settings):
         super().__init__(parent)
         
@@ -1177,11 +1205,16 @@ class SoulseekConnect(QDialog):
         
         self.soul_seek_client = Soulseek(username= settings["settings"]["slskusername"], password= settings["settings"]["slskpassword"])
         
+        print("client created")
+    
+        
         #asyncio.run(self.runAsync())
         
         self.selected_songs = []
         
         self.lastList = []
+        
+        self.download_count = 0
         
         self.available_song_list = []
         self.added_songs_list = []
@@ -1190,7 +1223,7 @@ class SoulseekConnect(QDialog):
         self.loaded_songs_queue = Queue()
         
         
-        
+        self.all_transfers = []
         
         
         self.setWindowTitle(f"Soulseek Manager")
@@ -1201,10 +1234,12 @@ class SoulseekConnect(QDialog):
         
         layout = QHBoxLayout()
         main_layout = QVBoxLayout()
+        final_layout = QHBoxLayout()
         
+        print("layouts created")
 
         name_layout = QHBoxLayout()
-        playlist_name_label = QLabel("Search Soulseek:")
+        playlist_name_label = QLabel("Search Soulseek (Downloads will inititate once window is closed):")
         name_layout.addWidget(playlist_name_label)
         main_layout.addLayout(name_layout)
 
@@ -1230,6 +1265,20 @@ class SoulseekConnect(QDialog):
         layout.addWidget(self.available_song_list_widget)
         
         self.available_song_list_widget.verticalScrollBar().valueChanged.connect(self.scrolled)
+        
+        
+        downloadsLayout = QVBoxLayout()
+        
+        queued_label = QLabel("Download Queue:")
+        downloadsLayout.addWidget(queued_label)
+        
+        self.queued_song_download_widget = QListWidget()
+        self.queued_song_download_widget.setMinimumSize(250, 100)
+        self.queued_song_download_widget.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+        downloadsLayout.addWidget(self.queued_song_download_widget)
+        
+        print("finished soulseek UI")
+
 
         # self.added_song_list_widget = QListWidget()
         # self.added_song_list_widget.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
@@ -1261,7 +1310,12 @@ class SoulseekConnect(QDialog):
         
         main_layout.addLayout(layout)
         
-        self.setLayout(main_layout)
+        final_layout.addLayout(main_layout)
+        final_layout.addLayout(downloadsLayout)
+        
+        self.setLayout(final_layout)
+        
+        print("SOULSEEK INIT FINISH")
         
         
     def scrolled(self, value):
@@ -1434,7 +1488,11 @@ class SoulseekConnect(QDialog):
         self.available_song_list_widget.clear()
         print(text)
         
-        search_results = asyncio.run(self.ParseSearch(text))
+        # Schedule the ParseSearch coroutine
+        asyncio.ensure_future(self.run_search(text))
+
+    async def run_search(self, text):
+        search_results = await self.ParseSearch(text)
         print(search_results)
         self.loading_thread(search_results)
 
@@ -1498,28 +1556,42 @@ class SoulseekConnect(QDialog):
         print("Downloading song!")
         button = self.sender()
         
-        song_to_add = (button.property("item_data"))
+        self.download_count +=1
+
+        song_to_add = button.property("item_data")
         print(song_to_add)
-        
-        transfer = asyncio.run(self.download_buffer(song_to_add))
-        
-        print(transfer)
-        
+
+        # Schedule the download_buffer coroutine to run without blocking
+        asyncio.create_task(self.download_and_handle_song(button, song_to_add))
+
+    async def download_and_handle_song(self, button, song_to_add):
+        await self.download_buffer(song_to_add)
+
+
+        # Update UI with the transfer details
+        self.queued_song_download_widget.addItem(
+            os.path.splitext(os.path.basename(song_to_add["file"]))[0]
+        )
+
+        # Update the button to reflect the song's downloaded state
         button.setText('X')
-        button.setProperty("transfer_id", transfer)
         button.setObjectName("remove")
         button.clicked.disconnect()  # Disconnect the add_song method
         button.clicked.connect(self.stop_song_download)  # Connect to remove_song method
-        
         button.setStyle(button.style())
         
 
+    def change_transfer_state(self, transfer):
+        print("State changed")
+    
 
     def stop_song_download(self):
         print("Stopping song download!")
         button = self.sender()
         
-        download_to_stop = button.property("transfer_id")
+        self.download_count -=1
+        
+        download_to_stop = button.property("item_data")["file"]
         
         self.soul_seek_client.stopDownload(download_to_stop)
         
@@ -1533,21 +1605,119 @@ class SoulseekConnect(QDialog):
         print(self.added_songs_list)
     
     def save_and_close(self):
-        """ 
-            Playlists are formatted as such:
-            Filename = Playlist name
-            Every line is the name of a song from the songs folder
         
-        """
         
-        """ error_popup = QMessageBox()
-        error_popup.setIcon(QMessageBox.Icon.Warning)
-        error_popup.setWindowTitle("Error")
-        error_popup.setText("One or more playlists already have this name! Please choose a new name.")
-        error_popup.exec()
-        return """
-                
+        self.closing_event.emit(self.soul_seek_client, self.download_count)
+        
+        # self.progress_popup = ProgressPopup(self.download_count, self.soul_seek_client)
+        # self.progress_popup.start_progress()
+        # self.progress_popup.exec()
+        
+        #self.soul_seek_client.download_finished.connect(self.progress_popup.update_progress)
+        
+        #self.soul_seek_client.begin_downloads()
+        
+        
         self.accept()
+        
+    def song_download_complete(self):
+        print("Understood song is complete")
+        
+        self.progress_popup.update_progress()
+
+
+
+class DownloadThread(QThread):
+    progress_updated = pyqtSignal(int, str)  # Signal to update progress
+    finished = pyqtSignal(object)  # Signal emitted when all downloads are complete
+
+    def __init__(self, soul_seek, total_downloads):
+        super().__init__()
+        self.soul_seek = soul_seek
+        self.total_downloads = total_downloads
+        self.finished_downloads = 0
+        self.progress_report = {"failed" : 0}
+        
+        # Connect the soulseekclient's signal to update progress
+        self.soul_seek.download_finished.connect(self.on_download_finished)
+
+    def run(self):
+        # Start the download process
+        self.soul_seek.begin_downloads()
+        
+        # When downloads are complete, emit the finished signal
+        self.finished.emit(self.progress_report)
+
+    def on_download_finished(self, transferInfo):
+        # Handle each finished download
+        if transferInfo is None:
+            song_name = "Failed to download song"
+            self.progress_report["failed"] += 1
+        else:
+            song_name = "Finished downloading: " + os.path.splitext(os.path.basename(transferInfo.remote_path))[0]
+
+        # Increment finished download count
+        self.finished_downloads += 1
+        
+        # Calculate progress percentage
+        progress = int(self.finished_downloads / self.total_downloads * 100)
+        
+        # Emit the progress updated signal
+        self.progress_updated.emit(progress, song_name)
+
+
+class ProgressPopup(QDialog):
+    def __init__(self, total_downloads, soulseekclient: SoulseekConnect):
+        super().__init__()
+        self.setWindowTitle("Download Progress")
+        self.setGeometry(100, 100, 300, 100)
+
+        self.soul_seek = soulseekclient
+        self.soul_seek.download_finished.connect(self.update_progress)
+
+        self.total_downloads = total_downloads
+        self.finished_downloads = 0
+
+        layout = QVBoxLayout()
+
+        self.info_label = QLabel("Your songs are being downloaded. Download times will vary, and some downloads may be unable to complete.\n(the program can hang, but things are happening)")
+        self.info_label.setObjectName("numbers")
+        layout.addWidget(self.info_label)
+
+        self.current_song = QLabel(alignment=Qt.AlignmentFlag.AlignCenter)
+        self.current_song.setObjectName("numbers")
+        layout.addWidget(self.current_song)
+
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setMinimum(0)
+        self.progress_bar.setMaximum(100)
+
+        layout.addWidget(self.progress_bar)
+        self.setLayout(layout)
+
+    def start_progress(self):
+        self.progress = 0
+        self.progress_bar.setValue(self.progress)
+
+        self.download_thread = DownloadThread(self.soul_seek)
+        self.download_thread.finished.connect(self.on_download_finished)
+        self.download_thread.start()
+
+    def update_progress(self, transferInfo):
+        if transferInfo is None:
+            self.current_song.setText("Failed to download song")
+        else:
+            self.current_song.setText("Finished downloading: " + os.path.splitext(os.path.basename(transferInfo.remote_path))[0])
+
+        self.finished_downloads += 1
+        self.progress = int(self.finished_downloads / self.total_downloads * 100)
+        self.progress_bar.setValue(self.progress)
+
+    def on_download_finished(self):
+        self.current_song.setText("All downloads completed.")
+        self.close()
+
+
 
 
 
