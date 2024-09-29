@@ -134,6 +134,7 @@ class MusicPlayer(QMainWindow):
         
         self.saved_position = 0
         self.stopped = True
+        self.totalDownloads = 0
         
         # VLC player instance
         self.instance = vlc.Instance()
@@ -245,6 +246,12 @@ class MusicPlayer(QMainWindow):
         self.PLaylistLayout = QVBoxLayout()
         
         self.PLaylistLayout.addLayout(self.additionalButtonsLayout)
+        
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setMinimum(0)
+        self.progress_bar.setMaximum(100)
+        
+        self.PLaylistLayout.addWidget(self.progress_bar)
         
         self.playlist_widget = QListWidget()
         self.playlist_widget.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
@@ -611,20 +618,31 @@ class MusicPlayer(QMainWindow):
 
     def being_background_downloads(self, SoulseekPassed : Soulseek, totalDownloads):
         self.can_open_soulseek = False
+        self.finished_downloads = 0
+                
+        self.totalDownloads = totalDownloads
         
         self.download_thread = DownloadThread(SoulseekPassed, totalDownloads)
         
         # Connect the progress and finished signals to appropriate slots
         #self.download_thread.progress_updated.connect(self.on_progress_updated)
         self.download_thread.finished.connect(self.on_downloads_complete)
+        self.download_thread.update_progress.connect(self.on_update_progress_bar)
         
         # Start the download thread
         self.download_thread.start()
+        
+    def on_update_progress_bar(self):
+        self.finished_downloads += 1
+        self.progress = int(self.finished_downloads / self.totalDownloads * 100)
+        self.progress_bar.setValue(self.progress)
 
     def on_downloads_complete(self, info):
         print("DOWNLOADS DONE")
         
         self.can_open_soulseek = True
+        
+        self.progress_bar.setValue(0)
         
         error_popup = QMessageBox()
         error_popup.setIcon(QMessageBox.Icon.Information)
@@ -1159,7 +1177,7 @@ class LoadingWorker(QThread):
             item.setData(Qt.ItemDataRole.UserRole, song["title"])
             item_widget = QWidget()
 
-            line_text = QLabel(os.path.splitext(os.path.basename(song["title"]))[0])
+            line_text = QLabel(os.path.splitext(os.path.basename(song["title"]))[0]+"   --  "+str.upper(os.path.splitext(os.path.basename(song["title"]))[1]))
             line_text.setObjectName("song")
             line_text.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
@@ -1659,6 +1677,7 @@ class SoulseekConnect(QDialog):
 
 class DownloadThread(QThread):
     progress_updated = pyqtSignal(int, str)  # Signal to update progress
+    update_progress = pyqtSignal()
     finished = pyqtSignal(object)  # Signal emitted when all downloads are complete
 
     def __init__(self, soul_seek, total_downloads):
@@ -1685,6 +1704,8 @@ class DownloadThread(QThread):
             self.progress_report["failed"] += 1
         else:
             song_name = "Finished downloading: " + os.path.splitext(os.path.basename(transferInfo.remote_path))[0]
+
+        self.update_progress.emit()
 
         # Increment finished download count
         self.finished_downloads += 1
