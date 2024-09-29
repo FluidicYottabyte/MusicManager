@@ -9,7 +9,7 @@ class GitUpdater:
         Parameters:
         repo_dir (str): The directory of the git repository. Defaults to the current directory.
         """
-        self.repo_dir = repo_dir if repo_dir else os.getcwd()
+        self.repo_dir = os.getcwd()
 
     def run_git_command(self, command):
         """
@@ -29,7 +29,7 @@ class GitUpdater:
         Fetches the latest changes from the remote repository.
         """
         print("Fetching the latest changes...")
-        stdout, stderr = self.run_git_command(['git', 'fetch'])
+        stdout, stderr = self.run_git_command(['cmd','git', 'fetch'])
         
         if stderr:
             print(f"Error during fetch: {stderr}")
