@@ -5,6 +5,11 @@ dist
 dist/
 build
 build/
+.vs
+.vs/*
+__pycache__
+__pycache__/*
+SlskSearchOutput.txt
 MusicManager.spec
 
 !.gitkeep
