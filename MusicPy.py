@@ -1,3 +1,6 @@
+"""Lord forgive me for the contents present in this file- I simply started programming and never stopped"""
+
+
 import sys
 import os
 import random
@@ -105,6 +108,8 @@ class MusicPlayer(QMainWindow):
         super().__init__()
         
         self.updater = GitUpdater()
+        
+        self.can_open_soulseek = True
         
         if not self.updater.check_for_updates():
             print("Behind")
@@ -589,12 +594,24 @@ class MusicPlayer(QMainWindow):
         self.load_playlists()
 
     def openSoulseek(self):
-        
+        if not self.can_open_soulseek:
+            error_popup = QMessageBox()
+            error_popup.setIcon(QMessageBox.Icon.Information)
+            error_popup.setWindowTitle("Downloads ongoing...")
+
+            error_popup.setText("There are currently ongoing downloads. All SoulSeek related processees must wait for them to complete!")
+            
+            error_popup.exec()
+            
+            return
+            
         localSoulseek = SoulseekConnect(self, settings=settings)
         localSoulseek.closing_event.connect(self.being_background_downloads)
         localSoulseek.exec()
 
     def being_background_downloads(self, SoulseekPassed : Soulseek, totalDownloads):
+        self.can_open_soulseek = False
+        
         self.download_thread = DownloadThread(SoulseekPassed, totalDownloads)
         
         # Connect the progress and finished signals to appropriate slots
@@ -606,6 +623,8 @@ class MusicPlayer(QMainWindow):
 
     def on_downloads_complete(self, info):
         print("DOWNLOADS DONE")
+        
+        self.can_open_soulseek = True
         
         error_popup = QMessageBox()
         error_popup.setIcon(QMessageBox.Icon.Information)
@@ -1306,7 +1325,7 @@ class SoulseekConnect(QDialog):
         layout.addWidget(buttons)
         
         buttons.accepted.connect(self.save_and_close)
-        buttons.rejected.connect(self.reject)
+        buttons.rejected.connect(self.close_without_downloading)
         
         main_layout.addLayout(layout)
         
@@ -1595,6 +1614,17 @@ class SoulseekConnect(QDialog):
         
         self.soul_seek_client.stopDownload(download_to_stop)
         
+        items = self.queued_song_download_widget.findItems( os.path.splitext(os.path.basename(download_to_stop))[0], Qt.MatchFlag.MatchExactly)
+
+        if items:
+            # Remove the found item
+            item = items[0]
+            row = self.queued_song_download_widget.row(item)
+            self.queued_song_download_widget.takeItem(row)
+            print(f"Item with text '{os.path.splitext(os.path.basename(download_to_stop))[0]}' removed.")
+        else:
+            print(f"No item with text '{os.path.splitext(os.path.basename(download_to_stop))[0]}' found.")
+        
         button.setText(u'\u2913')
         button.setObjectName("add")
         button.clicked.disconnect()  # Disconnect the add_song method
@@ -1606,19 +1636,19 @@ class SoulseekConnect(QDialog):
     
     def save_and_close(self):
         
-        
         self.closing_event.emit(self.soul_seek_client, self.download_count)
         
-        # self.progress_popup = ProgressPopup(self.download_count, self.soul_seek_client)
-        # self.progress_popup.start_progress()
-        # self.progress_popup.exec()
-        
-        #self.soul_seek_client.download_finished.connect(self.progress_popup.update_progress)
-        
-        #self.soul_seek_client.begin_downloads()
-        
-        
         self.accept()
+        
+        
+    def close_without_downloading(self):
+        loop = asyncio.get_event_loop()
+        asyncio.ensure_future(self.AsyncLogout())
+        
+    async def AsyncLogout(self):
+        loop = asyncio.get_event_loop()
+        results = await loop.run_in_executor(None, self.soul_seek_client.logout_client)
+        self.reject()
         
     def song_download_complete(self):
         print("Understood song is complete")

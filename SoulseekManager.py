@@ -144,6 +144,15 @@ class Soulseek(QThread):
             finally:
                 self.task_queue.task_done()
         
+        
+    def logout_client(self):
+        return self._queue_task(self._logout_task)
+
+    async def _logout_task(self):
+        print("Loggin out....")
+        await self.client.stop()
+        
+        
     def _queue_task(self, task, *args):
         self.task_queue.put((task, args))
         result = self.result_queue.get()
@@ -191,6 +200,8 @@ class Soulseek(QThread):
             result = self._queue_task(task, args[0], args[1])
             
             self.download_finished.emit(result)
+            
+        self.logout_client()
 
 
     def download(self, username, filename):
@@ -238,15 +249,30 @@ class Soulseek(QThread):
                 print(f"A transfer moved from state {previous.state} to {current.state}!")
     
 
-    def stopDownload(self, transfer):
-        self._queue_task(self._stop_download_task, transfer)
-
-    async def _stop_download_task(self, transfer):
+    def stopDownload(self, filepath):
         if not self.logged_in:
             raise RuntimeError("Client is not logged in.")
-        await self.client.transfers.abort(transfer)
-        print(f"Download stopped for {transfer.filename}")
-
+        
+        # Temporary list to hold transfers that don't match the filepath
+        remaining_downloads = Queue()
+        
+        try:
+            while True:
+                stuff = self.downloads_queue.get_nowait()
+                
+                task, args = stuff
+                
+                if args[1] != filepath:
+                    remaining_downloads.put(task, *args)
+                else:
+                    print(f"Download removed for {filepath}")
+                
+        except Empty:
+            pass
+        
+        # Replace the old queue with the updated queue
+        self.downloads_queue = remaining_downloads
+        
     def close(self):
         self.task_queue.put((self._shutdown, ()))
         self.thread.join()
