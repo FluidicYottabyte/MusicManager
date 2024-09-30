@@ -111,21 +111,31 @@ class MusicPlayer(QMainWindow):
         
         self.can_open_soulseek = True
         
-        if not self.updater.check_for_updates():
-            print("Behind")
+        updateStatus = None
+        
+        try:
+            updateStatus = self.updater.check_for_updates()
             
-            error_popup = QMessageBox()
-            error_popup.setIcon(QMessageBox.Icon.Information)
-            error_popup.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-            error_popup.setWindowTitle("Update Available")
-            error_popup.setText("An update to Music Manager has been detected. Would you like to update? (you will need to manually restart Music Manager to see effects.)")
-            response = error_popup.exec()
+            if not updateStatus:
+                print("Behind")
+                
+                error_popup = QMessageBox()
+                error_popup.setIcon(QMessageBox.Icon.Information)
+                error_popup.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+                error_popup.setWindowTitle("Update Available")
+                error_popup.setText("An update to Music Manager has been detected. Would you like to update? (you will need to manually restart Music Manager to see effects.)")
+                response = error_popup.exec()
+                
+                if response == QMessageBox.StandardButton.Yes:
+                    print("User clicked Yes")
+                    self.updater.update()
+                else:
+                    print("User clicked No")
             
-            if response == QMessageBox.StandardButton.Yes:
-                print("User clicked Yes")
-                self.updater.update()
-            else:
-                print("User clicked No")
+        except:
+            print("Looks like there's an issue with the updater! Oh well!")
+        
+        
     
         self.utilities = resource_path('Utility')
         
