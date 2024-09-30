@@ -956,7 +956,10 @@ class CreatePlaylistDialog(QDialog):
                     except KeyError:
                         album = "Unknown Album"
         
-        return(title,artist,album[0])
+        try:
+            return(title,artist,album[0])
+        except:
+            return(title,artist,album)
 
 
     def add_song(self):
