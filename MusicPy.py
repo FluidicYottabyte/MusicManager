@@ -1447,6 +1447,9 @@ class SoulseekConnect(QDialog):
             
             self.available_song_list_widget.addItem(item)
             self.available_song_list_widget.setItemWidget(item,iteamdeclaration)
+            
+            if self.loaded_songs_queue.empty():
+                break
 
             
         print("Finished loading songs into ui")
