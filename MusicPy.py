@@ -1238,7 +1238,6 @@ class SoulseekConnect(QDialog):
     def __init__(self, parent, settings):
         super().__init__(parent)
         
-        # Computer wants this "" too, don't know why but it will cry if it doesn't have that
         if settings["settings"]["slskusername"] == '': 
             msg_box = InputMessageBox()
             result = msg_box.exec()
@@ -1363,9 +1362,9 @@ class SoulseekConnect(QDialog):
         buttons_layout.addWidget(buttons)
             
         
-        layout.addLayout(buttons_layout)
+        #layout.addLayout(buttons_layout)
         
-        layout.addWidget(buttons)
+        #layout.addWidget(buttons)
         
         buttons.accepted.connect(self.save_and_close)
         buttons.rejected.connect(self.close_without_downloading)
@@ -1374,6 +1373,7 @@ class SoulseekConnect(QDialog):
         
         final_layout.addLayout(main_layout)
         final_layout.addLayout(downloadsLayout)
+        final_layout.addLayout(buttons_layout)
         
         self.setLayout(final_layout)
         

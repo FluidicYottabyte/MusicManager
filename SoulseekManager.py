@@ -57,6 +57,9 @@ class DownloadWorker(QThread):
 
         try:
             loop.run_until_complete(self.main())
+        except Exception:
+            print("Stopping download thread")
+
         finally:
             loop.close()
 
