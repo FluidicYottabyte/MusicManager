@@ -34,7 +34,7 @@ The SoulSeek implimentation for Music Manager would not be possible without Jerg
 
 As an offline music player, it works as well as you would want, you can add files, create playlists, etc. A library has not been implimented in the way I would like it to be, but that is in the works.
 
-Using SoulSeek is a bit more complex, and is prone to errors. As the way you interact with SoulSeek servers is.. unreliable to say the least. Downloads can fail for multiple reasons, and searching the network is slow. Everything should work, if you're patient enough.
+Using SoulSeek is a bit more complex, and is prone to errors. As the way you interact with SoulSeek servers is.. unreliable to say the least. Downloads can fail for multiple reasons, and searching the network is slow. Things usually work, if you're patient enough.
 
 If you want to use some other SoulSeek tool to dowload your songs, simply download them to `MusicManager/Songs ` and everything will work just fine.
 
