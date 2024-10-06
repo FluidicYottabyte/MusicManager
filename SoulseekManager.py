@@ -57,6 +57,9 @@ class DownloadWorker(QThread):
 
         try:
             loop.run_until_complete(self.main())
+        except Exception:
+            print("Stopping download thread")
+
         finally:
             loop.close()
 
@@ -78,7 +81,7 @@ class Soulseek(QThread):
     """Main Soulseek manager class. Login, download files, etc."""
 
     download_finished = pyqtSignal(object)
-
+    login_unsuccessfull = pyqtSignal(bool)
 
     def __init__(self, username, password) -> None:
         super().__init__()
@@ -127,8 +130,21 @@ class Soulseek(QThread):
     async def _start_and_login(self):
         
         
-        await self.client.start()
-        await self.client.login()
+        
+        try:
+            await self.client.start()
+            await self.client.login()
+
+        except Exception:
+            self.login_unsuccessfull.emit(True)
+            try:
+                await self.client.stop()
+            except:
+                print("Client never logged in")
+            self.loadingthread.terminate()
+            print("Finished cleaning up emergency logout")
+            return
+
         self.logged_in = True
                         
         print("Login successful")
@@ -263,7 +279,7 @@ class Soulseek(QThread):
                 task, args = stuff
                 
                 if args[1] != filepath:
-                    remaining_downloads.put(task, *args)
+                    remaining_downloads.put((task, args))
                 else:
                     print(f"Download removed for {filepath}")
                 

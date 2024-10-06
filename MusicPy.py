@@ -1,6 +1,8 @@
 """Lord forgive me for the contents present in this file- I simply started programming and never stopped"""
 
 
+from logging import warn, warning
+import re
 import sys
 import os
 import random
@@ -19,7 +21,6 @@ from PyQt6 import QtCore
 from mutagen import File
 from mutagen.flac import FLAC, Picture
 from PIL import Image
-from io import BytesIO
 from mutagen.id3 import ID3
 import json
 import atexit
@@ -257,11 +258,11 @@ class MusicPlayer(QMainWindow):
         
         self.PLaylistLayout.addLayout(self.additionalButtonsLayout)
         
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setMinimum(0)
-        self.progress_bar.setMaximum(100)
+        self.loading_progress_bar = QProgressBar()
+        self.loading_progress_bar.setMinimum(0)
+        self.loading_progress_bar.setMaximum(100)
         
-        self.PLaylistLayout.addWidget(self.progress_bar)
+        self.PLaylistLayout.addWidget(self.loading_progress_bar)
         
         self.playlist_widget = QListWidget()
         self.playlist_widget.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
@@ -645,14 +646,14 @@ class MusicPlayer(QMainWindow):
     def on_update_progress_bar(self):
         self.finished_downloads += 1
         self.progress = int(self.finished_downloads / self.totalDownloads * 100)
-        self.progress_bar.setValue(self.progress)
+        self.loading_progress_bar.setValue(self.progress)
 
     def on_downloads_complete(self, info):
         print("DOWNLOADS DONE")
         
         self.can_open_soulseek = True
         
-        self.progress_bar.setValue(0)
+        self.loading_progress_bar.setValue(0)
         
         error_popup = QMessageBox()
         error_popup.setIcon(QMessageBox.Icon.Information)
@@ -1237,7 +1238,7 @@ class SoulseekConnect(QDialog):
     def __init__(self, parent, settings):
         super().__init__(parent)
         
-        if settings["settings"]["slskusername"] == '':
+        if settings["settings"]["slskusername"] == '': 
             msg_box = InputMessageBox()
             result = msg_box.exec()
             print(result)
@@ -1251,10 +1252,20 @@ class SoulseekConnect(QDialog):
                 print("Cancelled")
                 self.reject()
                 return
+            
+        if settings["settings"]["slskpassword"] == "":
+            self.show_login_error()
+            return
                 
-        
-        self.soul_seek_client = Soulseek(username= settings["settings"]["slskusername"], password= settings["settings"]["slskpassword"])
-        
+        try:
+            self.soul_seek_client = Soulseek(username= settings["settings"]["slskusername"], password= settings["settings"]["slskpassword"])
+            self.soul_seek_client.login_unsuccessfull.connect(self.show_login_error)
+        except Exception:
+            print("Could not connect. Possible error occured.")
+            self.show_login_error()
+            return
+            
+
         print("client created")
     
         
@@ -1351,9 +1362,9 @@ class SoulseekConnect(QDialog):
         buttons_layout.addWidget(buttons)
             
         
-        layout.addLayout(buttons_layout)
+        #layout.addLayout(buttons_layout)
         
-        layout.addWidget(buttons)
+        #layout.addWidget(buttons)
         
         buttons.accepted.connect(self.save_and_close)
         buttons.rejected.connect(self.close_without_downloading)
@@ -1362,6 +1373,7 @@ class SoulseekConnect(QDialog):
         
         final_layout.addLayout(main_layout)
         final_layout.addLayout(downloadsLayout)
+        final_layout.addLayout(buttons_layout)
         
         self.setLayout(final_layout)
         
@@ -1678,6 +1690,18 @@ class SoulseekConnect(QDialog):
     def close_without_downloading(self):
         loop = asyncio.get_event_loop()
         asyncio.ensure_future(self.AsyncLogout())
+
+    def show_login_error(self):
+        error_popup = QMessageBox()
+        error_popup.setIcon(QMessageBox.Icon.Warning)
+        error_popup.setWindowTitle("Error")
+        error_popup.setText("Invalid SoulSeek login.")
+        error_popup.exec()
+
+        settings["settings"]["slskusername"] = ""
+        settings["settings"]["slskpassword"] = ""
+
+        self.reject()
         
     async def AsyncLogout(self):
         loop = asyncio.get_event_loop()
