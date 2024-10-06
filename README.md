@@ -1,6 +1,6 @@
 ## Music Manager is an offline music & audio player with the ability to connect to SoulSeek.
 
-Thank you for taking interest in my little side project! I started this in Senior year of High School a little over a year ago, I've never made a program so large, and thus, it's a little messy. I would certainly do it a lot differently knowing what I know now 😅 (I have considered rewriting it in C# or something idk)
+Thank you for taking interest in my little side project! I started this in Senior year of High School a little over a year ago, I've never made a program so large, and thus, it's a little messy. I would certainly do it a lot differently knowing what I know now 😅 (I have considered rewriting it in C# or something but I'm lazy)
 
 ### Installation Guide:
 
