@@ -1,13 +1,17 @@
-"""Lord forgive me for the contents present in this file- I simply started programming and never stopped"""
+"""Lord forgive me for the contents present in this file- I simply started programming and never stopped."""
 
 
+import array
 from logging import warn, warning
 import re
 import sys
 import os
 import random
+from telnetlib import theNULL
 import time
 import math
+from typing import Type
+from xmlrpc.client import TRANSPORT_ERROR
 import numpy as np
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QLabel, QVBoxLayout, QHBoxLayout, QWidget,
@@ -26,6 +30,9 @@ import json
 import atexit
 import shutil 
 import codecs
+
+from sympy import false, true
+from voluptuous import ValueInvalid
 from Updater import GitUpdater
 import ctypes
 import threading
@@ -139,6 +146,9 @@ class MusicPlayer(QMainWindow):
         
     
         self.utilities = resource_path('Utility')
+        self.songs_path = resource_path('Songs')
+        
+        self.available_song_list = []
         
         self.setWindowTitle('Music Manager')
         self.setGeometry(100, 100, 800, 600)
@@ -146,6 +156,16 @@ class MusicPlayer(QMainWindow):
         self.saved_position = 0
         self.stopped = True
         self.totalDownloads = 0
+        
+        self.playing = ""
+        self.playing_a_single_song = False
+        
+        self.playlist_array = []
+        
+        self.librarysearch = ""
+        self.playlistsearch = ""
+        
+        self.dedicated_song_button = None
         
         # VLC player instance
         self.instance = vlc.Instance()
@@ -180,7 +200,7 @@ class MusicPlayer(QMainWindow):
         self.album_art.setScaledContents(True)
         self.song_info_layout.addWidget(self.album_art)
         
-        self.song_details = QLabel('Song Name',alignment=Qt.AlignmentFlag.AlignTop)
+        self.song_details = QLabel('No song playing',alignment=Qt.AlignmentFlag.AlignTop)
         self.song_details.setWordWrap(True)
         self.song_details.setFixedWidth(200)
         self.song_info_layout.addWidget(self.song_details)
@@ -218,7 +238,7 @@ class MusicPlayer(QMainWindow):
         self.control_layout = QHBoxLayout()
         
         self.play_button = QPushButton(u'\u25b6')
-        self.play_button.clicked.connect(self.play_song)
+        self.play_button.clicked.connect(lambda : self.play_song(from_main = True))
         self.control_layout.addWidget(self.play_button)
         
         self.stop_button = QPushButton(u'II')
@@ -248,9 +268,9 @@ class MusicPlayer(QMainWindow):
         self.soulseek_open.clicked.connect(self.openSoulseek)
         self.additionalButtonsLayout.addWidget(self.soulseek_open)
         
-        self.soulseek_open = QPushButton("Search library")
-        self.soulseek_open.clicked.connect(self.openSoulseek)
-        self.additionalButtonsLayout.addWidget(self.soulseek_open)
+        self.library_open = QPushButton("Switch to library")
+        self.library_open.clicked.connect(self.change_search_params)
+        self.additionalButtonsLayout.addWidget(self.library_open)
         
 
         # Playlists
@@ -263,6 +283,14 @@ class MusicPlayer(QMainWindow):
         self.loading_progress_bar.setMaximum(100)
         
         self.PLaylistLayout.addWidget(self.loading_progress_bar)
+        
+        self.searchBar = QLineEdit()
+        self.searchBar.setPlaceholderText("Search your playlists")
+        self.searchBar.textChanged.connect(self.update_search)
+        
+        self.searching_library = False
+        
+        self.PLaylistLayout.addWidget(self.searchBar)
         
         self.playlist_widget = QListWidget()
         self.playlist_widget.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
@@ -313,6 +341,8 @@ class MusicPlayer(QMainWindow):
         
         self.change_volume(self.system_volume)
         
+        self.load_available_songs()
+        
     
     
     def open_drag_drop_window(self):
@@ -334,7 +364,9 @@ class MusicPlayer(QMainWindow):
                 if os.path.splitext(path1)[1].lower() in [".mp3", ".flac", ".aiff",".wav"]: 
                     if not os.path.isfile(os.path.join(resource_path("Songs"),os.path.basename(path1))): #Checks if file already exists, or not
                         shutil.copy(path1,os.path.join(resource_path("Songs"),os.path.basename(path1)))
-                
+        
+        self.load_available_songs()
+        
         return
         
     def extract_pitch_range(self, media_player):
@@ -416,7 +448,299 @@ class MusicPlayer(QMainWindow):
                 
                 self.playlist_widget.setItemWidget(seperator, lineFrame)
                 
+                self.playlist_array.append({"name":os.path.splitext(playlist_file)[0]})
+                
+    
+    
+    def load_playlists_with_includion_list(self, lists_too_load):
+        self.playlist_widget.clear()  # Clear existing items before loading
+        playlists_path = resource_path('Playlists')
+        for playlist_file in os.listdir(playlists_path):
+            
+            is_able_to_add = True
+            
+            try:
+                print(lists_too_load.index(os.path.splitext(playlist_file)[0]))
+            except ValueError:
+                print("Playlist is not in inclusion list")
+                is_able_to_add = False
+            
+            if playlist_file.endswith('.txt') and is_able_to_add:
+                # item = QListWidgetItem(os.path.splitext(playlist_file)[0])
+                # self.playlist_widget.addItem(item)
+                # item.setData(Qt.ItemDataRole.UserRole, playlist_file)
+                
+                item = QListWidgetItem()
+                item.setData(Qt.ItemDataRole.UserRole, playlist_file)
+                item_widget = QWidget()
+                line_text = QLabel(os.path.splitext(playlist_file)[0])
+                line_text.setSizePolicy(
+                    QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+                )
+                
+                line_push_button = QPushButton(u'\u25b6')
+                line_push_button.setObjectName("playlists")
+                line_push_button.clicked.connect(self.play_playlist)
+                line_push_button.setSizePolicy(
+                    QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed
+                )
+                line_push_button.setProperty('item_data', playlist_file)
+                
+                line_edit_button = QPushButton(u"\u26ED")
+                line_edit_button.setObjectName("playlists")
+                line_edit_button.clicked.connect(self.show_playlist_popup)
+                line_edit_button.setSizePolicy(
+                    QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed
+                )
+                line_edit_button.setProperty('item_data', playlist_file)
+                
+                item_layout = QHBoxLayout()
+                item_layout.addWidget(line_text)
+                item_layout.addWidget(line_push_button)
+                item_layout.addWidget(line_edit_button)
+                item_widget.setLayout(item_layout)
+                
+                item.setSizeHint(item_widget.sizeHint())
+                self.playlist_widget.addItem(item)
+                self.playlist_widget.setItemWidget(item, item_widget)
+                
+                seperator = QListWidgetItem()
+                seperator.setSizeHint(QSize(0, 5))
+                seperator.setFlags(Qt.ItemFlag.NoItemFlags)
+                
+                self.playlist_widget.addItem(seperator)
+                
+                lineFrame = QFrame()
+                lineFrame.setFrameShape(QFrame.Shape.HLine)
+                lineFrame.setFrameShadow(QFrame.Shadow.Sunken)
+                
+                self.playlist_widget.setItemWidget(seperator, lineFrame)
+    
+    
+    def change_search_params(self):
+        print("Library and playlist search params saved as: ", self.librarysearch, self.playlistsearch)
+        if self.searching_library:
+            self.searching_library = False
+            
+            if self.librarysearch == "" and self.playlistsearch == "":
+                self.update_search(self.playlistsearch)
+                #self.load_playlists()
+                
+            self.searchBar.setPlaceholderText("Search your playlists")
+            self.searchBar.setText(self.playlistsearch)
+            self.library_open.setText("Switch to Library")
+        else:
+            self.searching_library = True
+            
+            if self.librarysearch == "" and self.playlistsearch == "":
+                self.update_search(self.librarysearch)
+                #self.load_available_songs(self.available_song_list)
+                
+            self.searchBar.setPlaceholderText("Search your library")
+            self.searchBar.setText(self.librarysearch)
+            self.library_open.setText("Switch to Playlists")
+            
+
+    def update_search(self, text):
+        print(text)
         
+        
+        
+        if self.searching_library:
+            print("Now searching in the library")
+            if text == "":
+                self.load_song_list(self.available_song_list)
+                self.librarysearch = text
+                return
+                
+            search_results = self.non_exact_search(self.available_song_list, text)
+            self.load_song_list(search_results)
+            self.librarysearch = text
+            
+        else:
+            if text == "":
+                self.load_playlists()
+                self.playlistsearch = text
+                return
+            print("Searching in the playlists")
+            search_results = self.non_exact_search(self.playlist_array, text)
+            print("Search results ",search_results)
+            temp_playlist_array_reformatting = []
+            for i in search_results:
+                for key, value in i.items():
+                    temp_playlist_array_reformatting.append(value)
+                    
+            search_results = temp_playlist_array_reformatting
+            
+            print("Reformatteds search results: ", search_results)
+                
+            self.playlistsearch = text
+            
+            self.load_playlists_with_includion_list(search_results)
+            
+            
+            
+            
+    def non_exact_search(self, data, search_term):
+        results = []
+        print(data)
+        search_term_lower = search_term.lower()
+        
+        for entry in data:
+            for key, value in entry.items():
+                # Skip the key if it's "file"
+                if key == "file":
+                    continue
+                
+                # Check for the search term in the remaining values
+                if search_term_lower in value.lower():
+                    results.append(entry)
+                    break
+    
+        return results
+        
+
+    def load_song_list(self, song_list):
+        self.playlist_widget.setUpdatesEnabled(False)
+
+        if song_list != None:
+            self.lastList = song_list
+        else:
+            song_list = self.lastList
+            
+        self.playlist_widget.clear()
+        
+        for song in song_list:
+            
+            
+            item = QListWidgetItem()
+            item.setData(Qt.ItemDataRole.UserRole, song["file"])
+            item_widget = QWidget()
+            
+            line_text = QLabel(os.path.splitext(os.path.basename(song["file"]))[0])
+            line_text.setObjectName("song")
+            line_text.setSizePolicy(
+                QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+            )
+            
+            print("Looking at song file: ", song["file"])
+            
+            if self.playing == song["file"] and self.playing != "":
+                print("Setting button to pause")
+                line_push_button = QPushButton('II')
+                line_push_button.setObjectName("playlists")
+                line_push_button.clicked.connect(self.stop_song)
+                line_push_button.setSizePolicy(
+                    QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed
+                )
+                line_push_button.setProperty('item_data', song["file"])
+            else:
+                print("Setting button to play")
+                line_push_button = QPushButton(u'\u25b6')
+                line_push_button.setObjectName("playlists")
+                line_push_button.clicked.connect(lambda : self.play_song(noplaylist=True))
+                line_push_button.setSizePolicy(
+                    QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed
+                )
+                line_push_button.setProperty('item_data', song["file"])
+            
+            item_layout = QHBoxLayout()
+            item_layout.addWidget(line_text)
+            item_layout.addWidget(line_push_button)
+
+            item_widget.setLayout(item_layout)
+            
+            item.setSizeHint(QSize(item_widget.width()-100, 35))
+            self.playlist_widget.addItem(item)
+            self.playlist_widget.setItemWidget(item, item_widget)
+            
+            seperator = QListWidgetItem()
+            seperator.setSizeHint(QSize(0, 5))
+            seperator.setFlags(Qt.ItemFlag.NoItemFlags)
+            
+            self.playlist_widget.addItem(seperator)
+            
+            lineFrame = QFrame()
+            lineFrame.setFrameShape(QFrame.Shape.HLine)
+            lineFrame.setFrameShadow(QFrame.Shadow.Sunken)
+            
+            self.playlist_widget.setItemWidget(seperator, lineFrame)
+        
+        self.playlist_widget.setUpdatesEnabled(True)
+
+    
+    
+    def load_available_songs(self):
+        
+        self.available_song_list = []
+        
+        for song_file in os.listdir(self.songs_path):
+            if song_file.endswith(('.mp3', '.flac', '.wav','.aiff', '.m4a')):
+                title, artist, album = self.get_metadata(os.path.join(self.songs_path,song_file))
+                
+                self.available_song_list.append({"file":os.path.join(self.songs_path,song_file),"title":title, "artist":artist, "album":album})
+                
+
+
+    #
+    # Note: Kill me, this should be callable from another method, but I hate myself. And didn't write it like that.
+    # This stupid fucking program gets moe bloated by the minute. At least it still works.
+    #
+    
+    def get_metadata(self, song_path):
+        audio = File(song_path)
+        
+        title = os.path.splitext(song_path)[0]
+        artist = ""
+        album = ""
+        
+        if os.path.splitext(song_path)[1].lower() in [".mp3", ".flac", ".aiff"]: 
+            if audio:
+                title = audio.tags.get('TIT2', ['Unknown Title'])[0]
+                artist = audio.tags.get('TPE1', ['Unknown Artist'])[0]
+                album = audio.tags.get('TALB', ['Unknown Album'])[0]
+                
+                
+                pict= None
+                
+                if os.path.splitext(song_path)[1] == ".flac":
+                    
+                    
+                    var = FLAC(song_path)
+                    print("Song metadata: "+ str(var))
+                    
+                    try:
+                        artist = var['artist'][0]
+                    except KeyError:
+                        print("There was an error fetching song artist.")
+                        
+                                    
+                    try:
+                        title = var['title'][0]
+                    except KeyError:
+                        print("There was an error fetching song title")
+                        if title != 'Unknown Artist':
+                            title = os.path.splitext(os.path.basename(song_path))[0] 
+                    
+                    pics = var.pictures
+                    for p in pics:
+                        if p.type == 3: #front cover
+                            print("\nfound front cover") 
+                            with open("cover.jpg", "wb") as f:
+                                pict = (p.data)
+                    
+                    print(var)
+                    
+                    try:
+                        album = var["ALBUM"]
+                    except KeyError:
+                        album = "Unknown Album"
+        
+        try:
+            return(title,artist,album[0])
+        except:
+            return(title,artist,album)
+
 
 
     def play_playlist(self):        
@@ -440,19 +764,84 @@ class MusicPlayer(QMainWindow):
                     self.current_playlist.append(song_path)
 
     
-    def play_song(self):
+    def play_song(self, *args, **kwargs):
+        
+        noplaylist = kwargs.get('noplaylist', False)
+        loop = kwargs.get('loop', False)
+        from_main_button = kwargs.get('from_main', False)
         
         
+        if from_main_button and self.dedicated_song_button != None:
+            try:
+                self.dedicated_song_button.clicked.disconnect()
+            except TypeError:
+                pass
+            
+            self.dedicated_song_button.setText("II")
+            
+            self.dedicated_song_button.clicked.connect(self.stop_song)  # Connect to remove_song method
         
-        if not self.current_playlist:
+        
+        if noplaylist:
+            print("No playlist required to play song")
+            sender = self.sender()
+            single_song_to_play = self.sender().property("item_data")
+            
+            sender.setText("II")
+            
+            if self.dedicated_song_button != None and self.dedicated_song_button != sender:
+                self.dedicated_song_button.setText(u'\u25b6')
+                
+                try:
+                    self.dedicated_song_button.clicked.disconnect()
+                except TypeError:
+                    pass
+                
+                self.dedicated_song_button.clicked.connect(lambda : self.play_song(noplaylist=True))
+
+            try:
+                sender.clicked.disconnect()
+            except TypeError:
+                pass
+            
+            sender.clicked.connect(self.stop_song)  # Connect to remove_song method
+        
+            sender.setStyle(sender.style())
+            
+            self.dedicated_song_button = sender
+            
+            print(single_song_to_play)
+        elif self.dedicated_song_button != None and from_main_button:
+            single_song_to_play = self.dedicated_song_button.property("item_data")
+        else:
+            self.dedicated_song_button = None
+            single_song_to_play = False
+            
+        if loop:
+            single_song_to_play = self.playing
+        
+        if not self.current_playlist and single_song_to_play == False:
+            print("Required variables not present, must abort")
             return
 
-        if self.current_index == -1:
+        if self.current_index == -1 or ((self.playing != single_song_to_play) and self.playing != "" and single_song_to_play != False):
             self.current_index = 0
 
-        song_path = self.current_playlist[self.current_index]
+        if ((self.playing != single_song_to_play) and self.playing != "" and single_song_to_play != False):
+            print("Resetting save position")
+            self.saved_position = 0
+
+        if single_song_to_play != False:
+            song_path = single_song_to_play
+            self.playing_a_single_song = True
+        else:
+            song_path = self.current_playlist[self.current_index]
+            self.playing_a_single_song = False
+            
+            
         song_full_path = os.path.join(resource_path('Songs'), song_path)
         print(song_full_path)
+        self.playing = song_full_path
         media = self.instance.media_new(song_full_path)
         
 
@@ -530,7 +919,10 @@ class MusicPlayer(QMainWindow):
                     tags = ID3(song_path)
                     
                     print(tags.pprint())
-                    pict = tags.getall("APIC")[0].data
+                    try:
+                        pict = tags.getall("APIC")[0].data
+                    except IndexError:
+                        print("Picture could not be aquied at all")
                     print(pict)
                 # Load album art if available
                 if pict != None:
@@ -558,6 +950,30 @@ class MusicPlayer(QMainWindow):
         if self.stopped:
             return
         
+        try:
+            if self.sender().property("item_data") == self.playing:
+                self.sender().setText(u'\u25b6')
+                
+                try:
+                    self.sender().clicked.disconnect()
+                except TypeError:
+                    pass
+                
+                self.sender().clicked.connect(lambda : self.play_song(noplaylist=True))
+                
+        except Exception as warn:
+            print(warn)
+        
+        if self.dedicated_song_button != None:
+            self.dedicated_song_button.setText(u'\u25b6')
+            
+            try:
+                self.dedicated_song_button.clicked.disconnect()
+            except TypeError:
+                pass
+            
+            self.dedicated_song_button.clicked.connect(lambda : self.play_song(noplaylist=True))
+        
         self.stopped = True
         # Save the current position before stopping
         self.saved_position = self.player.get_time()
@@ -566,19 +982,20 @@ class MusicPlayer(QMainWindow):
         self.timer.stop()
 
     def skip_forward(self):
-        if self.current_playlist:
+        if self.current_playlist and not self.playing_a_single_song:
             self.saved_position = 0
             self.current_index = (self.current_index + 1) % len(self.current_playlist)
             self.play_song()
 
     def skip_back(self):
-        if self.current_playlist:
+        if self.current_playlist and not self.playing_a_single_song:
+            self.saved_position = 0
             self.current_index = (self.current_index - 1) % len(self.current_playlist)
             self.play_song()
 
     def shuffle_songs(self):
-        self.saved_position = 0
-        if self.current_playlist:
+        if self.current_playlist and not self.playing_a_single_song:
+            self.saved_position = 0
             random.shuffle(self.current_playlist)
             self.current_index = 0
             self.play_song()
@@ -592,6 +1009,9 @@ class MusicPlayer(QMainWindow):
             if duration > 0:
                 self.progress_bar.setValue(int((current_time / duration) * 1000))
         if not self.player.is_playing():
+            if self.playing_a_single_song:
+                self.saved_position = 0
+                self.play_song(loop = True)
             self.skip_forward()
 
     def set_position(self, position):
@@ -604,12 +1024,15 @@ class MusicPlayer(QMainWindow):
         playlist_file = button.property('item_data')
         dialog = CreatePlaylistDialog(self, playlist_file)
         dialog.exec()
-        self.load_playlists()
+        
+        if not self.searching_library:
+            self.load_playlists()
 
     def create_playlist(self):
         dialog = CreatePlaylistDialog(self, None)
         dialog.exec()
-        self.load_playlists()
+        if not self.searching_library:
+            self.load_playlists()
 
     def openSoulseek(self):
         if not self.can_open_soulseek:
@@ -650,6 +1073,8 @@ class MusicPlayer(QMainWindow):
 
     def on_downloads_complete(self, info):
         print("DOWNLOADS DONE")
+        
+        self.load_available_songs()
         
         self.can_open_soulseek = True
         
@@ -795,7 +1220,7 @@ class CreatePlaylistDialog(QDialog):
     def load_available_songs(self):
         
         for song_file in os.listdir(self.songs_path):
-            if song_file.endswith(('.mp3', '.flac', '.wav','.aiff')):
+            if song_file.endswith(('.mp3', '.flac', '.wav','.aiff', '.m4a')):
                 title, artist, album = self.get_metadata(os.path.join(self.songs_path,song_file))
                 
                 self.available_song_list.append({"file":os.path.join(self.songs_path,song_file),"title":title, "artist":artist, "album":album})
